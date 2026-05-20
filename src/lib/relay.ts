@@ -3,7 +3,7 @@
 // ============================================================
 
 import type { ProviderConfig, ChatCompletionRequest, ApiKey } from './types';
-import { resolveProvider, getUpstreamUrl } from './providers';
+import { resolveProvider, getUpstreamUrl, resolveModelAlias } from './providers';
 import { selectKey, markCooldown } from './key-manager';
 import { recordUsage } from './usage';
 
@@ -102,6 +102,9 @@ export async function relayRequest(
     );
   }
 
+  // Resolve model alias (e.g. gpt-4 → gpt-4-turbo)
+  const resolvedModel = resolveModelAlias(body.model);
+
   // Select an API key
   const apiKey = selectKey(provider);
   if (!apiKey) {
@@ -116,8 +119,9 @@ export async function relayRequest(
   const headers = buildHeaders(provider, apiKey, !!body.stream);
   const isAnthropic = provider.headerFormat === 'anthropic';
 
-  // Transform request body if needed
-  const requestBody = isAnthropic ? transformToAnthropic(body) : body;
+  // Transform request body if needed (use resolved model name)
+  const bodyWithResolvedModel = { ...body, model: resolvedModel };
+  const requestBody = isAnthropic ? transformToAnthropic(bodyWithResolvedModel) : bodyWithResolvedModel;
 
   // Make the upstream request
   const maxRetries = Math.min(

@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { validateAuth, relayRequest, RelayError } from '@/lib/relay';
+import { checkQuota } from '@/lib/usage';
 
 export const runtime = 'edge';
 
@@ -69,6 +70,27 @@ export async function POST(request: NextRequest) {
         },
       }),
       { status: 400, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // 3.5. Check rate limits (quota)
+  const quota = await checkQuota();
+  if (!quota.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: `Rate limit exceeded. Daily: ${quota.dailyUsed}/${quota.dailyLimit}, Monthly: ${quota.monthlyUsed}/${quota.monthlyLimit}. Retry after ${quota.retryAfter}s.`,
+          type: 'rate_limit_error',
+          code: 429,
+        },
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(quota.retryAfter || 60),
+        },
+      }
     );
   }
 

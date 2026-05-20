@@ -177,16 +177,22 @@ XIAOMI_KEYS=xxx1
 # 可选配置
 OPENAI_BASE_URL=https://api.openai.com  # 自定义 base URL
 CLAUDE_BASE_URL=https://api.anthropic.com
+
+# 额度控制（可选，0 或不设置 = 不限制）
+RELAY_DAILY_LIMIT=1000      # 每日最大请求数
+RELAY_MONTHLY_LIMIT=30000   # 每月最大请求数
 ```
 
 ## 七、交付计划
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| P0.1 | 项目初始化 + 基础结构 | 进行中 |
-| P0.2 | /v1/chat/completions 接口（单 Provider） | 待做 |
-| P0.3 | 多 Provider 路由 | 待做 |
-| P0.4 | Key 轮换 + 故障重试 | 待做 |
-| P0.5 | 用量追踪 | 待做 |
-| P0.6 | 流式响应支持 | 待做 |
-| P1 | 管理面板 / 额度控制 | 后续 |
+| P0.1 | 项目初始化 + 基础结构 | ✅ 已完成 |
+| P0.2 | /v1/chat/completions 接口（单 Provider） | ✅ 已完成 |
+| P0.3 | 多 Provider 路由（OpenAI/Claude/DeepSeek/MiMo） | ✅ 已完成 |
+| P0.4 | Key 轮换 + 429 故障重试 | ✅ 已完成 |
+| P0.5 | 用量追踪（Vercel KV） | ✅ 已完成 |
+| P0.6 | 流式响应（SSE 透传） | ✅ 已完成 |
+| P1.1 | 模型别名映射（gpt-4 → gpt-4-turbo 等） | ✅ 已完成 |
+| P1.2 | 额度控制（每日/每月上限 + 429 超限提示） | ✅ 已完成 |
+| P1.3 | 管理面板（/admin — Key 池状态 + 用量统计） | ✅ 已完成 |

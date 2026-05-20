@@ -45,11 +45,38 @@ export const PROVIDERS: Record<ProviderName, ProviderConfig> = {
 };
 
 /**
+ * Model alias mapping — lets users request common names that get
+ * transparently rewritten to the actual upstream model ID.
+ *
+ * Add entries here when you want to support shortcuts like "gpt-4"
+ * routing to "gpt-4-turbo", or custom aliases for your team.
+ */
+const MODEL_ALIASES: Record<string, string> = {
+  'gpt-4': 'gpt-4-turbo',
+  'gpt-3.5': 'gpt-3.5-turbo',
+  'claude-3': 'claude-3-5-sonnet-20241022',
+  'claude-3-opus': 'claude-3-opus-20240229',
+  'claude-3-sonnet': 'claude-3-5-sonnet-20241022',
+  'claude-3-haiku': 'claude-3-5-haiku-20241022',
+};
+
+/**
+ * Resolve a model alias to its actual model name.
+ * Returns the original name if no alias exists.
+ */
+export function resolveModelAlias(model: string): string {
+  const lower = model.toLowerCase();
+  return MODEL_ALIASES[lower] || model;
+}
+
+/**
  * Resolve which provider a model name belongs to.
+ * Automatically resolves aliases before matching.
  * Returns null if no provider matches.
  */
 export function resolveProvider(model: string): ProviderConfig | null {
-  const lowerModel = model.toLowerCase();
+  const resolved = resolveModelAlias(model);
+  const lowerModel = resolved.toLowerCase();
   for (const provider of Object.values(PROVIDERS)) {
     for (const prefix of provider.modelPrefixes) {
       if (lowerModel.startsWith(prefix)) {
