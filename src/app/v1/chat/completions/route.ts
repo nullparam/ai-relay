@@ -5,7 +5,7 @@
 import { NextRequest } from 'next/server';
 import { validateAuth, relayRequest } from '@/lib/relay';
 import { RelayError } from '@/lib/errors';
-import { KVUsageStorage } from '@/lib/usage';
+import { KVUsageStorage, createUsageEvent } from '@/lib/usage';
 
 export const runtime = 'edge';
 
@@ -189,6 +189,29 @@ export async function POST(request: NextRequest) {
       });
     } else {
       const responseBody = await response.text();
+
+      // Track usage directly in route handler (not fire-and-forget — Edge Runtime kills bg tasks)
+      if (response.ok) {
+        try {
+          const data = JSON.parse(responseBody);
+          if (data.usage) {
+            const event = createUsageEvent({
+              provider: provider.name,
+              model: body.model,
+              apiKeyHash: apiKey.hash,
+              statusCode: response.status,
+              promptTokens: data.usage.prompt_tokens || 0,
+              completionTokens: data.usage.completion_tokens || 0,
+              latencyMs: 0,
+              isStream: false,
+            });
+            await usageStorage.record(event);
+          }
+        } catch (e) {
+          console.error('[Usage] non-stream track failed:', e);
+        }
+      }
+
       return new Response(responseBody, {
         status: response.status,
         headers: {
