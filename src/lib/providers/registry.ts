@@ -43,8 +43,8 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     baseUrl: 'https://token-plan-sgp.xiaomimimo.com/v1',
     modelPrefixes: ['mimo-'],
     headerFormat: 'azure',
-    envKeyField: 'XIAOMIMIMO_KEYS',
-    envBaseUrlField: 'XIAOMIMIMO_BASE_URL',
+    envKeyField: 'XIAOMIMIMO_SGP_KEYS',
+    envBaseUrlField: 'XIAOMIMIMO_SGP_BASE_URL',
   },
   xiaomi: {
     name: 'xiaomi',
