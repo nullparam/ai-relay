@@ -272,8 +272,8 @@ export class KVUsageStorage implements UsageStorage {
     const month = thisMonth();
 
     const [dailyUsed, monthlyUsed] = await Promise.all([
-      kv.get<number>(`quota:daily:${date}`).then((v) => v || 0),
-      kv.get<number>(`quota:monthly:${month}`).then((v) => v || 0),
+      (kv.get(`quota:daily:${date}`) as Promise<number | null>).then((v) => v || 0),
+      (kv.get(`quota:monthly:${month}`) as Promise<number | null>).then((v) => v || 0),
     ]);
 
     if (dailyLimit > 0 && dailyUsed >= dailyLimit) {
