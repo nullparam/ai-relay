@@ -84,14 +84,24 @@ function parseDailyPoint(date: string, raw: Record<string, unknown> | null): Tre
  * Lazy KV client loader.
  * Returns null if KV is not configured.
  */
+let _kv: any = null;
+let _kvChecked = false;
+
 async function getKV() {
+  if (_kvChecked) return _kv;
+  _kvChecked = true;
   if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
     return null;
   }
   try {
-    const { kv } = await import('@vercel/kv');
-    return kv;
-  } catch {
+    const { createClient } = await import('@vercel/kv');
+    _kv = createClient({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
+    });
+    return _kv;
+  } catch (e) {
+    console.error('[KV] Failed to create client:', e);
     return null;
   }
 }
@@ -103,7 +113,10 @@ export class KVUsageStorage implements UsageStorage {
   async record(event: UsageEvent): Promise<void> {
     try {
       const kv = await getKV();
-      if (!kv) return;
+      if (!kv) {
+        console.error('[Usage] KV not available — record skipped');
+        return;
+      }
 
       const date = today();
       const totalTokens = event.totalTokens;
@@ -139,7 +152,8 @@ export class KVUsageStorage implements UsageStorage {
 
       // Increment quota counters
       await this.incrementQuota(kv);
-    } catch {
+    } catch (e) {
+      console.error('[Usage] record failed:', e);
       // Non-critical — never break the request
     }
   }
