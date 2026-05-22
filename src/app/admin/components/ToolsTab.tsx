@@ -571,12 +571,12 @@ export default function ToolsTab({ apiKey, lang, t, providers, onRefreshData }: 
                       <div style={{
                         padding: '0.5rem 1rem',
                         borderRadius: '6px',
-                        border: '1px solid rgba(239, 68, 68, 0.15)',
-                        backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                        color: '#fca5a5',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                        color: '#9ca3af',
                         fontSize: '0.9rem',
                       }}>
-                        {t.testToolNoKeysWarning}
+                        {t.statusNoKeys}
                       </div>
                     )
                   )}
