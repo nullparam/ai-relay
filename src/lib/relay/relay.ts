@@ -4,7 +4,7 @@
 
 import type { ChatCompletionRequest } from '../types';
 import type { RelayResult, ProviderConfig, ApiKey } from '../providers/types';
-import { resolveProvider, getUpstreamUrl, resolveModelAlias, resolveFallbackModel, PROVIDERS } from '../providers';
+import { resolveProvider, getUpstreamUrl, resolveModelAlias, resolveFallbackModel, resolveUpstreamModel, PROVIDERS } from '../providers';
 import { selectKey, markCooldown, getKeyPool } from './key-pool';
 import { buildHeaders, transformToAnthropic } from './transform';
 import { RelayError } from '../errors';
@@ -95,7 +95,12 @@ export async function relayRequest(
     { provider: provider.displayName, error: primaryResult.lastError?.message || 'unknown error' },
   ];
 
-  for (const fbName of fallbackNames) {
+  for (const fbEntry of fallbackNames) {
+    // Parse "provider:model" format — model is optional
+    const colonIdx = fbEntry.indexOf(':');
+    const fbName = colonIdx >= 0 ? fbEntry.slice(0, colonIdx) : fbEntry;
+    const explicitModel = colonIdx >= 0 ? fbEntry.slice(colonIdx + 1) : null;
+
     const fbProvider = PROVIDERS[fbName];
     if (!fbProvider) {
       console.warn(`[fallback] Unknown provider: ${fbName}, skipping`);
@@ -103,7 +108,7 @@ export async function relayRequest(
       continue;
     }
 
-    console.log(`Trying fallback: ${fbProvider.displayName} (after ${provider.displayName} failed)`);
+    console.log(`Trying fallback: ${fbProvider.displayName}${explicitModel ? ` (model: ${explicitModel})` : ''} (after ${provider.displayName} failed)`);
     const fbKey = await selectKey(fbProvider);
     if (!fbKey) {
       console.warn(`[fallback] ${fbProvider.displayName} has no API keys (env: ${fbProvider.envKeyField})`);
@@ -118,8 +123,11 @@ export async function relayRequest(
       continue;
     }
 
+    // If an explicit model was specified in the fallback entry, override the request model
+    const fbBody = explicitModel ? { ...body, model: explicitModel } : body;
+
     const fbResult = await withConcurrency(
-      () => tryProviderWithRetries(fbProvider, body, fbKey, fbMaxRetries)
+      () => tryProviderWithRetries(fbProvider, fbBody, fbKey, fbMaxRetries)
     );
     if (fbResult.result) {
       return fbResult.result;
@@ -175,7 +183,9 @@ async function tryProviderWithRetries(
 
     // Resolve target model and its alias for the current provider
     const targetModel = resolveFallbackModel(body.model, provider.name);
-    const resolvedModel = resolveModelAlias(targetModel);
+    const resolvedAlias = resolveModelAlias(targetModel);
+    // Map virtual model name to real upstream model ID (e.g. mimo-v2.5-pro-coding → mimo-v2.5-pro)
+    const resolvedModel = resolveUpstreamModel(resolvedAlias, provider);
 
     // Transform request body if needed (use resolved model name)
     // Inject stream_options.include_usage for streaming so upstream returns usage in final SSE chunk

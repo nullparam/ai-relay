@@ -49,7 +49,7 @@ export default function AdminPage() {
   // Configuration management states
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [providerKeys, setProviderKeys] = useState<Array<{ hash: string; masked: string; source: string }> | null>(null);
-  const [providerFallbacks, setProviderFallbacks] = useState<{ current: string[]; staticDefault: string | null; staticDefaults: string[]; isOverride: boolean } | null>(null);
+  const [providerFallbacks, setProviderFallbacks] = useState<{ current: string[]; staticDefault: string | null; staticDefaults: string[]; isOverride: boolean; availableModels: Record<string, { id: string; displayName: string }[]> } | null>(null);
   const [newKeyInput, setNewKeyInput] = useState('');
   const [operationLoading, setOperationLoading] = useState(false);
   const [configMessage, setConfigMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -58,8 +58,13 @@ export default function AdminPage() {
 
   // Automatically select a default value for the fallback-to-add dropdown when options change
   useEffect(() => {
+    // For the 'available to add' filter, extract provider name from 'provider:model' entries
+    const usedProviders = activeFallbacks.map(fb => {
+      const colonIdx = fb.indexOf(':');
+      return colonIdx >= 0 ? fb.slice(0, colonIdx) : fb;
+    });
     const available = data?.providers.filter(
-      (p) => p.id !== selectedProvider && !activeFallbacks.includes(p.id)
+      (p) => p.id !== selectedProvider && !usedProviders.includes(p.id)
     ) || [];
     if (available.length > 0) {
       if (!available.some(a => a.id === selectedFallbackToAdd)) {
@@ -148,6 +153,7 @@ export default function AdminPage() {
         staticDefault: fallbacksData.staticDefault,
         staticDefaults: fallbacksData.staticDefaults || [],
         isOverride: fallbacksData.isOverride,
+        availableModels: fallbacksData.availableModels || {},
       });
       setActiveFallbacks(fallbacksData.fallbacks || []);
     } catch (e) {
@@ -861,11 +867,15 @@ export default function AdminPage() {
                   padding: '0.25rem 0',
                 }}>
                   {activeFallbacks.length > 0 ? (
-                    activeFallbacks.map((fbId, idx) => {
+                    activeFallbacks.map((fbEntry, idx) => {
+                      const colonIdx = fbEntry.indexOf(':');
+                      const fbId = colonIdx >= 0 ? fbEntry.slice(0, colonIdx) : fbEntry;
+                      const fbModel = colonIdx >= 0 ? fbEntry.slice(colonIdx + 1) : '';
                       const fbName = data?.providers.find(p => p.id === fbId)?.name || fbId;
+                      const models = providerFallbacks?.availableModels?.[fbId] || [];
                       return (
                         <div
-                          key={`${fbId}-${idx}`}
+                          key={`${fbEntry}-${idx}`}
                           className="fallback-item"
                           style={{
                             display: 'flex',
@@ -875,7 +885,7 @@ export default function AdminPage() {
                             borderBottom: idx < activeFallbacks.length - 1 ? '1px solid #1c1c1f' : 'none',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }}>
                             <span style={{
                               color: '#666',
                               fontSize: '0.8rem',
@@ -887,12 +897,38 @@ export default function AdminPage() {
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
+                              flexShrink: 0,
                             }}>{idx + 1}</span>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{fbName}</span>
-                            <span style={{ fontSize: '0.75rem', color: '#555', fontFamily: 'monospace' }}>({fbId})</span>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', flexShrink: 0 }}>{fbName}</span>
+                            {/* Model selector */}
+                            <select
+                              value={fbModel}
+                              onChange={(e) => {
+                                const newList = [...activeFallbacks];
+                                newList[idx] = e.target.value ? `${fbId}:${e.target.value}` : fbId;
+                                setActiveFallbacks(newList);
+                              }}
+                              disabled={operationLoading}
+                              style={{
+                                padding: '0.2rem 0.4rem',
+                                borderRadius: '4px',
+                                border: '1px solid #333',
+                                backgroundColor: '#18181b',
+                                color: fbModel ? '#60a5fa' : '#666',
+                                fontSize: '0.75rem',
+                                outline: 'none',
+                                maxWidth: '180px',
+                                flexShrink: 1,
+                              }}
+                            >
+                              <option value="">Auto</option>
+                              {models.map(m => (
+                                <option key={m.id} value={m.id}>{m.displayName}</option>
+                              ))}
+                            </select>
                           </div>
 
-                          <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
                             {/* Up button */}
                             <button
                               onClick={() => {
@@ -970,7 +1006,13 @@ export default function AdminPage() {
                 </div>
 
                 {/* Add Fallback Form */}
-                {data && data.providers.filter(p => p.id !== selectedProvider && !activeFallbacks.includes(p.id)).length > 0 ? (
+                {(() => {
+                  const usedProviders = activeFallbacks.map(fb => {
+                    const ci = fb.indexOf(':');
+                    return ci >= 0 ? fb.slice(0, ci) : fb;
+                  });
+                  const availableToAdd = data?.providers.filter(p => p.id !== selectedProvider && !usedProviders.includes(p.id)) || [];
+                  return availableToAdd.length > 0 ? (
                   <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
                     <select
                       value={selectedFallbackToAdd}
@@ -987,9 +1029,7 @@ export default function AdminPage() {
                         outline: 'none',
                       }}
                     >
-                      {data.providers
-                        .filter(p => p.id !== selectedProvider && !activeFallbacks.includes(p.id))
-                        .map(p => (
+                      {availableToAdd.map(p => (
                           <option key={p.id} value={p.id}>
                             {p.name} ({p.id})
                           </option>
@@ -1014,11 +1054,12 @@ export default function AdminPage() {
                       + Add
                     </button>
                   </div>
-                ) : (
-                  <div style={{ color: '#555', fontSize: '0.8rem', marginBottom: '1.5rem', textAlign: 'center' }}>
-                    No other providers available to add.
-                  </div>
-                )}
+                  ) : (
+                    <div style={{ color: '#555', fontSize: '0.8rem', marginBottom: '1.5rem', textAlign: 'center' }}>
+                      No other providers available to add.
+                    </div>
+                  );
+                })()}
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>

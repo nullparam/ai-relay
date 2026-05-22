@@ -47,6 +47,19 @@ export function resolveProvider(model: string): ProviderConfig | null {
 /**
  * Get the upstream URL for a provider's chat completions endpoint.
  */
+/**
+ * Resolve the upstream model ID for a provider.
+ * If the provider has a modelMapping, the user-facing model name is
+ * translated to the real upstream model ID. Otherwise, returns as-is.
+ */
+export function resolveUpstreamModel(model: string, provider: ProviderConfig): string {
+  if (provider.modelMapping) {
+    const mapped = provider.modelMapping[model] || provider.modelMapping[model.toLowerCase()];
+    if (mapped) return mapped;
+  }
+  return model;
+}
+
 export function getUpstreamUrl(provider: ProviderConfig): string {
   const customBase = provider.envBaseUrlField
     ? process.env[provider.envBaseUrlField]
@@ -92,21 +105,22 @@ export function resolveFallbackModel(originalModel: string, targetProviderName: 
       return 'deepseek-chat';
 
     case 'xiaomi_sgp_coding':
-      // SGP has both mimo-v2.5-pro and mimo-v2.5-flash
+      // SGP has both mimo-v2.5-pro-sgp and mimo-v2.5-flash-sgp
       if (
         lowerModel.includes('mini') ||
         lowerModel.includes('haiku') ||
         lowerModel.includes('flash') ||
         lowerModel.includes('3.5-turbo')
       ) {
-        return 'mimo-v2.5-flash';
+        return 'mimo-v2.5-flash-sgp';
       }
-      return 'mimo-v2.5-pro';
+      return 'mimo-v2.5-pro-sgp';
 
     case 'xiaomi':
-    case 'xiaomi_coding':
-      // Default (non-SGP) only has mimo-v2.5-pro
       return 'mimo-v2.5-pro';
+
+    case 'xiaomi_coding':
+      return 'mimo-v2.5-pro-coding';
 
     case 'openai':
       if (

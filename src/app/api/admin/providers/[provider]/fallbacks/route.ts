@@ -33,12 +33,20 @@ export async function GET(request: NextRequest, { params }: { params: Params }) 
   const chain = await getFallbackChain(provider, staticFallbacks);
   const isOverride = chain.length !== staticFallbacks.length || chain.some((val, idx) => val !== staticFallbacks[idx]);
 
+  // Build available models per provider for the UI
+  const availableModels: Record<string, { id: string; displayName: string }[]> = {};
+  for (const [name, provConfig] of Object.entries(PROVIDERS)) {
+    if (name === provider) continue; // skip self
+    availableModels[name] = (provConfig.models || []).map(m => ({ id: m.id, displayName: m.displayName }));
+  }
+
   return Response.json({
     provider,
     fallbacks: chain,
     staticDefault: config.fallbackProvider || (config.fallbackProviders && config.fallbackProviders[0]) || null,
     staticDefaults: staticFallbacks,
     isOverride,
+    availableModels,
   });
 }
 
@@ -79,13 +87,33 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
     );
   }
 
-  // Validate all fallback provider names exist
+  // Validate all fallback entries — supports both "provider" and "provider:model" format
   for (const fb of body.fallbacks) {
-    if (typeof fb !== 'string' || !PROVIDERS[fb]) {
+    if (typeof fb !== 'string') {
       return Response.json(
-        { error: { message: `Invalid fallback provider: ${fb}. Valid: ${Object.keys(PROVIDERS).join(', ')}`, code: 400 } },
+        { error: { message: `Invalid fallback entry: ${fb}. Must be a string.`, code: 400 } },
         { status: 400 }
       );
+    }
+    const colonIdx = fb.indexOf(':');
+    const providerName = colonIdx >= 0 ? fb.slice(0, colonIdx) : fb;
+    const modelId = colonIdx >= 0 ? fb.slice(colonIdx + 1) : null;
+
+    if (!PROVIDERS[providerName]) {
+      return Response.json(
+        { error: { message: `Invalid fallback provider: ${providerName}. Valid: ${Object.keys(PROVIDERS).join(', ')}`, code: 400 } },
+        { status: 400 }
+      );
+    }
+    // If a model is specified, validate it exists in the target provider's model list
+    if (modelId) {
+      const targetModels = PROVIDERS[providerName].models || [];
+      if (!targetModels.some(m => m.id === modelId)) {
+        return Response.json(
+          { error: { message: `Invalid model '${modelId}' for provider '${providerName}'. Valid: ${targetModels.map(m => m.id).join(', ')}`, code: 400 } },
+          { status: 400 }
+        );
+      }
     }
   }
 
