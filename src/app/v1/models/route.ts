@@ -7,7 +7,7 @@
 
 import { NextRequest } from 'next/server';
 import { PROVIDERS } from '@/lib/providers';
-import { getKeyPoolStats, initAllKeyPools, getRelayApiKeys } from '@/lib/relay';
+import { getKeyPoolStats, initAllKeyPools, validateAuth } from '@/lib/relay';
 import type { ModelInfo } from '@/lib/providers/types';
 
 export const runtime = 'edge';
@@ -62,12 +62,11 @@ function getAllModels(): Array<ModelInfo & { owned_by: string; configured: boole
 export async function GET(request: NextRequest) {
   // Optional: auth check (some clients expect /v1/models to be public)
   const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
 
   // If auth is provided, validate it; otherwise allow unauthenticated access
-  if (token) {
-    const validKeys = getRelayApiKeys();
-    if (!validKeys.includes(token)) {
+  if (authHeader) {
+    const isValid = await validateAuth(request);
+    if (!isValid) {
       return Response.json(
         { error: { message: 'Invalid API key.', type: 'invalid_request_error', code: 401 } },
         { status: 401 }

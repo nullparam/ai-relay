@@ -3,7 +3,7 @@
 // ============================================================
 
 import { NextRequest } from 'next/server';
-import { getRelayApiKeys } from '@/lib/relay';
+import { requireAdminAuth } from '@/lib/admin';
 import { KVUsageStorage } from '@/lib/usage';
 
 export const runtime = 'nodejs';
@@ -31,16 +31,8 @@ const DEFAULT_RANGES: Record<string, string> = {
  */
 export async function GET(request: NextRequest) {
   // Auth check
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
-  const validKeys = getRelayApiKeys();
-
-  if (!token || !validKeys.includes(token)) {
-    return Response.json(
-      { error: { message: 'Unauthorized. Use Bearer token.', code: 401 } },
-      { status: 401 }
-    );
-  }
+  const authResponse = requireAdminAuth(request);
+  if (authResponse) return authResponse;
 
   // Parse parameters
   const { searchParams } = new URL(request.url);

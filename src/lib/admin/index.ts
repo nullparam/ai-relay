@@ -9,4 +9,4 @@ export {
   removeManagedKey,
 } from './admin-config';
 
-export { requireAdminAuth, getRelayApiKeys } from './auth';
+export { requireAdminAuth, getRelayApiKeys, getRelayAdminKeys } from './auth';

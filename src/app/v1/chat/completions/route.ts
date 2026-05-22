@@ -172,7 +172,7 @@ function estimatePromptTokens(body: { messages?: Array<{ content?: string | Arra
  */
 export async function POST(request: NextRequest) {
   // 1. Validate authentication
-  if (!validateAuth(request)) {
+  if (!(await validateAuth(request))) {
     return new Response(
       JSON.stringify({
         error: {

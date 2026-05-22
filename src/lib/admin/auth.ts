@@ -8,6 +8,21 @@ import { getRelayApiKeys } from '@/lib/relay';
 export { getRelayApiKeys };
 
 /**
+ * Get all configured admin API keys.
+ * Falls back to RELAY_API_KEY if RELAY_ADMIN_KEY is not defined.
+ */
+export function getRelayAdminKeys(): string[] {
+  const adminKeys = process.env.RELAY_ADMIN_KEY || '';
+  if (adminKeys) {
+    return adminKeys
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean);
+  }
+  return getRelayApiKeys();
+}
+
+/**
  * Validate admin authorization.
  * Returns null if valid, or a 401 Response if invalid.
  */
@@ -22,7 +37,7 @@ export function requireAdminAuth(request: Request): Response | null {
     );
   }
 
-  const validKeys = getRelayApiKeys();
+  const validKeys = getRelayAdminKeys();
   if (!validKeys.includes(token)) {
     return Response.json(
       { error: { message: 'Unauthorized. Invalid admin token.', code: 401 } },

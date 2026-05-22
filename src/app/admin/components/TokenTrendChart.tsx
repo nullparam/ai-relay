@@ -75,15 +75,51 @@ const COMPLETION_COLOR = '#8b5cf6';
 
 interface TokenTrendChartProps {
   apiKey: string;
+  lang?: 'zh' | 'en';
 }
 
-export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
+export default function TokenTrendChart({ apiKey, lang = 'zh' }: TokenTrendChartProps) {
   const [data, setData] = useState<UsageTrendData | null>(null);
   const [granularity, setGranularity] = useState<Granularity>('day');
   const [range, setRange] = useState('7d');
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isEn = lang === 'en';
+
+  const t = {
+    title: isEn ? '📉 Token Consumption Trend' : '📉 Token 消耗趋势',
+    promptTokens: isEn ? 'Prompt Tokens' : '输入 Token',
+    completionTokens: isEn ? 'Completion Tokens' : '输出 Token',
+    totalTokens: isEn ? 'Total Tokens' : '总 Token',
+    total: isEn ? 'Total' : '共计',
+    all: isEn ? 'All' : '全部',
+    loading: isEn ? 'Loading trend data...' : '正在加载趋势数据...',
+    error: isEn ? 'Failed to load trend data' : '加载趋势数据失败',
+    noData: isEn ? 'No usage data yet for this period' : '当前周期暂无消耗数据',
+  };
+
+  const rangeOptions = {
+    day: [
+      { value: '7d', label: isEn ? '7 Days' : '7天' },
+      { value: '30d', label: isEn ? '30 Days' : '30天' },
+    ],
+    week: [
+      { value: '4w', label: isEn ? '4 Weeks' : '4周' },
+      { value: '12w', label: isEn ? '12 Weeks' : '12周' },
+    ],
+    month: [
+      { value: '6m', label: isEn ? '6 Months' : '6个月' },
+      { value: '12m', label: isEn ? '12 Months' : '12个月' },
+    ],
+  };
+
+  const granularityLabels: Record<Granularity, string> = {
+    day: isEn ? 'Day' : '日',
+    week: isEn ? 'Week' : '周',
+    month: isEn ? 'Month' : '月',
+  };
 
   // When granularity changes, reset range to default for that granularity
   const handleGranularityChange = (g: Granularity) => {
@@ -102,11 +138,11 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
       const json = await res.json();
       setData(json);
     } catch (e) {
-      setError('Failed to load trend data');
+      setError(t.error);
     } finally {
       setLoading(false);
     }
-  }, [apiKey, granularity, range]);
+  }, [apiKey, granularity, range, t.error]);
 
   useEffect(() => {
     fetchTrend();
@@ -121,15 +157,17 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
   /** Format x-axis labels based on granularity */
   const fmtDate = (date: string) => {
     if (granularity === 'month') {
-      // "2026-05" → "5月"
       const month = parseInt(date.slice(5, 7), 10);
+      if (isEn) {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return months[month - 1] || `${month}`;
+      }
       return `${month}月`;
     }
     if (granularity === 'week') {
-      // "2026-W21" → "W21"
-      return date.replace(/^\d{4}-/, '');
+      const weekNum = date.replace(/^\d{4}-W/, '');
+      return isEn ? `W${weekNum}` : `第${weekNum}周`;
     }
-    // Day: "2026-05-21" → "5/21"
     const d = new Date(date + 'T00:00:00');
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
@@ -137,13 +175,15 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
   /** Format tooltip labels */
   const fmtTooltipDate = (date: string) => {
     if (granularity === 'month') {
-      return date; // "2026-05"
+      return date;
     }
     if (granularity === 'week') {
-      return `Week ${date.replace(/^\d{4}-W/, '')}`;
+      return isEn ? `Week ${date.replace(/^\d{4}-W/, '')}` : `第 ${date.replace(/^\d{4}-W/, '')} 周`;
     }
     const d = new Date(date + 'T00:00:00');
-    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    return isEn
+      ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   // Get chart data based on selected provider
@@ -179,7 +219,7 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
         ))}
         {payload.length >= 2 && (
           <div style={{ color: '#666', marginTop: '0.5rem', borderTop: '1px solid #333', paddingTop: '0.5rem' }}>
-            Total: {fmtTokens(payload.reduce((sum: number, p: any) => sum + p.value, 0))}
+            {t.total}: {fmtTokens(payload.reduce((sum: number, p: any) => sum + p.value, 0))}
           </div>
         )}
       </div>
@@ -203,7 +243,7 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
         gap: '0.75rem',
       }}>
         <h2 style={{ fontSize: '1.2rem', marginTop: 0, margin: 0 }}>
-          📉 Token Consumption Trend
+          {t.title}
         </h2>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Provider filter */}
@@ -224,7 +264,7 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
                   cursor: 'pointer',
                 }}
               >
-                {p === 'all' ? 'All' : (PROVIDER_DISPLAY_NAMES[p] || p)}
+                {p === 'all' ? t.all : (PROVIDER_DISPLAY_NAMES[p] || p)}
               </button>
             ))}
           </div>
@@ -248,14 +288,14 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
                   cursor: 'pointer',
                 }}
               >
-                {GRANULARITY_LABELS[g]}
+                {granularityLabels[g]}
               </button>
             ))}
           </div>
 
           {/* Range selector */}
           <div style={{ display: 'flex', gap: '0.25rem' }}>
-            {RANGE_OPTIONS[granularity].map((opt) => (
+            {rangeOptions[granularity].map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setRange(opt.value)}
@@ -278,7 +318,7 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
 
       {loading && (
         <div style={{ textAlign: 'center', padding: '3rem', color: '#666' }}>
-          Loading trend data...
+          {t.loading}
         </div>
       )}
 
@@ -323,7 +363,7 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
                 <Area
                   type="monotone"
                   dataKey="promptTokens"
-                  name="Prompt Tokens"
+                  name={t.promptTokens}
                   stroke={PROMPT_COLOR}
                   fill="url(#gradPrompt)"
                   strokeWidth={2}
@@ -332,7 +372,7 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
                 <Area
                   type="monotone"
                   dataKey="completionTokens"
-                  name="Completion Tokens"
+                  name={t.completionTokens}
                   stroke={COMPLETION_COLOR}
                   fill="url(#gradCompletion)"
                   strokeWidth={2}
@@ -360,7 +400,7 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
                 <Area
                   type="monotone"
                   dataKey="totalTokens"
-                  name="Total Tokens"
+                  name={t.totalTokens}
                   stroke="#2563eb"
                   fill="#2563eb"
                   fillOpacity={0.15}
@@ -416,7 +456,7 @@ export default function TokenTrendChart({ apiKey }: TokenTrendChartProps) {
 
       {!loading && !error && (!data || chartData.every((d: UsagePoint) => d.totalTokens === 0)) && (
         <div style={{ textAlign: 'center', padding: '3rem', color: '#555' }}>
-          No usage data yet for this period
+          {t.noData}
         </div>
       )}
     </section>

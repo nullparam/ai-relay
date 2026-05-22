@@ -3,7 +3,8 @@
 // ============================================================
 
 import { NextRequest } from 'next/server';
-import { getKeyPoolStats, getRelayApiKeys, initAllKeyPools } from '@/lib/relay';
+import { getKeyPoolStats, initAllKeyPools } from '@/lib/relay';
+import { requireAdminAuth } from '@/lib/admin';
 import { KVUsageStorage } from '@/lib/usage';
 import { PROVIDERS } from '@/lib/providers';
 
@@ -22,17 +23,9 @@ const usageStorage = new KVUsageStorage();
  * - Model aliases
  */
 export async function GET(request: NextRequest) {
-  // Auth check — require RELAY_API_KEY
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace(/^Bearer\s+/i, '') || '';
-  const validKeys = getRelayApiKeys();
-
-  if (!token || !validKeys.includes(token)) {
-    return Response.json(
-      { error: { message: 'Unauthorized. Use Bearer token.', code: 401 } },
-      { status: 401 }
-    );
-  }
+  // Auth check — require RELAY_ADMIN_KEY (falls back to RELAY_API_KEY)
+  const authResponse = requireAdminAuth(request);
+  if (authResponse) return authResponse;
 
   // Eagerly init all provider pools so stats reflect all configured providers
   initAllKeyPools(PROVIDERS);
