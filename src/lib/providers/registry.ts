@@ -20,6 +20,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     envBaseUrlField: 'LPGPT_BASE_URL',
     models: [
       { id: 'gpt-5.3', displayName: 'GPT-5.3', contextWindow: 128000, maxOutput: 16384, supportsStream: true, supportsVision: true, supportsTools: true },
+      { id: 'gpt-5.3-codex', displayName: 'GPT-5.3 Codex', contextWindow: 128000, maxOutput: 16384, supportsStream: true, supportsVision: true, supportsTools: true },
       { id: 'gpt-5.4', displayName: 'GPT-5.4', contextWindow: 128000, maxOutput: 16384, supportsStream: true, supportsVision: true, supportsTools: true },
       { id: 'gpt-5.5', displayName: 'GPT-5.5', contextWindow: 128000, maxOutput: 16384, supportsStream: true, supportsVision: true, supportsTools: true },
     ],
