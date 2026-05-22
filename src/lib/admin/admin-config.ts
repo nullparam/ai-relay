@@ -65,6 +65,9 @@ export async function getFallbackChain(
   providerName: string,
   staticFallbacks?: string[] | string
 ): Promise<string[]> {
+  if ((global as any).__mockFallbackChain) {
+    return (global as any).__mockFallbackChain(providerName, staticFallbacks);
+  }
   try {
     const kv = await getKV();
     if (kv) {

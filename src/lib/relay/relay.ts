@@ -54,42 +54,47 @@ export async function relayRequest(
     );
   }
 
-  // Pre-flight: check rate limiter (token bucket + circuit breaker)
-  const rateLimitCheck = checkRateLimit(provider.name);
-  if (!rateLimitCheck.allowed) {
-    throw new RelayError(
-      rateLimitCheck.reason || 'Rate limit exceeded',
-      'rate_limit_error',
-      429
-    );
-  }
-
-  // Select an API key
-  const apiKey = await selectKey(provider);
   let primaryResult: { result: RelayResult | null; lastError: Error | null } = { result: null, lastError: null };
 
-  if (apiKey) {
-    // Retry with key rotation + exponential backoff
-    const pool = await getKeyPool(provider);
-    const maxRetries = Math.min(pool.keys.length, 3);
-
-    // Try primary provider with retries (with concurrency control)
-    primaryResult = await withConcurrency(
-      () => tryProviderWithRetries(provider, body, apiKey, maxRetries)
-    );
-    if (primaryResult.result) {
-      return primaryResult.result;
-    }
-  } else {
-    primaryResult.lastError = new Error(`No API keys configured for provider: ${provider.displayName}`);
-  }
-
-  // If primary provider failed, try fallback chain from KV (or static default)
+  // Fetch fallback chain early to determine if we can fall back on rate limit/circuit breaker open
   const { getFallbackChain } = await import('../admin/admin-config');
   const fallbackNames = await getFallbackChain(
     provider.name,
     provider.fallbackProviders || provider.fallbackProvider
   );
+
+  // Pre-flight: check rate limiter (token bucket + circuit breaker)
+  const rateLimitCheck = checkRateLimit(provider.name);
+
+  if (!rateLimitCheck.allowed) {
+    // If no fallbacks are configured, fail immediately with 429
+    if (fallbackNames.length === 0) {
+      throw new RelayError(
+        rateLimitCheck.reason || 'Rate limit exceeded',
+        'rate_limit_error',
+        429
+      );
+    }
+    primaryResult.lastError = new Error(rateLimitCheck.reason || 'Rate limit exceeded');
+  } else {
+    // Select an API key
+    const apiKey = await selectKey(provider);
+    if (apiKey) {
+      // Retry with key rotation + exponential backoff
+      const pool = await getKeyPool(provider);
+      const maxRetries = Math.min(pool.keys.length, 3);
+
+      // Try primary provider with retries (with concurrency control)
+      primaryResult = await withConcurrency(
+        () => tryProviderWithRetries(provider, body, apiKey, maxRetries)
+      );
+      if (primaryResult.result) {
+        return primaryResult.result;
+      }
+    } else {
+      primaryResult.lastError = new Error(`No API keys configured for provider: ${provider.displayName}`);
+    }
+  }
 
   const errors: { provider: string; error: string }[] = [
     { provider: provider.displayName, error: primaryResult.lastError?.message || 'unknown error' },
