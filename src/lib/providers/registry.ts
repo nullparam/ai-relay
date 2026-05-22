@@ -77,7 +77,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
   // ⚠️ xiaomimimo 排在 xiaomi 前面，同为 mimo- 前缀时优先匹配
   xiaomimimo: {
     name: 'xiaomimimo',
-    displayName: 'MiMo SGP (中转)',
+    displayName: 'MiMo SGP (新加坡)',
     baseUrl: 'https://token-plan-sgp.xiaomimimo.com/v1',
     modelPrefixes: ['mimo-'],
     headerFormat: 'azure',
@@ -91,7 +91,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
   },
   xiaomi: {
     name: 'xiaomi',
-    displayName: 'MiMo CN (官方)',
+    displayName: 'MiMo CN (中国)',
     baseUrl: 'https://api.xiaomi.com/v1',
     modelPrefixes: ['mimo-'],
     headerFormat: 'openai',

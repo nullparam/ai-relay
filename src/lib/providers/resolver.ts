@@ -58,3 +58,93 @@ export function getUpstreamUrl(provider: ProviderConfig): string {
   }
   return `${base}/chat/completions`;
 }
+
+/**
+ * Resolves a model ID suitable for the fallback provider based on the original model ID.
+ * Maps reasoning models to reasoning models, cheap models to cheap models, and standard models to standard models.
+ */
+export function resolveFallbackModel(originalModel: string, targetProviderName: string): string {
+  const lowerModel = originalModel.toLowerCase();
+  const targetProvider = PROVIDERS[targetProviderName];
+
+  // 1. If the original model already starts with one of the target provider's prefixes,
+  // we can use the original model directly.
+  if (targetProvider) {
+    for (const prefix of targetProvider.modelPrefixes) {
+      if (lowerModel.startsWith(prefix)) {
+        return originalModel;
+      }
+    }
+  }
+
+  // 2. Otherwise, map based on the target provider
+  switch (targetProviderName) {
+    case 'deepseek':
+      // Map reasoning models to deepseek-reasoner, others to deepseek-chat
+      if (
+        lowerModel.startsWith('o1') ||
+        lowerModel.startsWith('o3') ||
+        lowerModel.includes('reasoner') ||
+        lowerModel.includes('r1')
+      ) {
+        return 'deepseek-reasoner';
+      }
+      return 'deepseek-chat';
+
+    case 'xiaomimimo':
+      // xiaomimimo has mimo-v2.5-pro and mimo-v2.5-flash
+      if (
+        lowerModel.includes('mini') ||
+        lowerModel.includes('haiku') ||
+        lowerModel.includes('flash') ||
+        lowerModel.includes('3.5-turbo')
+      ) {
+        return 'mimo-v2.5-flash';
+      }
+      return 'mimo-v2.5-pro';
+
+    case 'xiaomi':
+      // xiaomi only has mimo-v2.5-pro
+      return 'mimo-v2.5-pro';
+
+    case 'openai':
+      if (
+        lowerModel.startsWith('o1') ||
+        lowerModel.startsWith('o3') ||
+        lowerModel.includes('reasoner')
+      ) {
+        return 'o3-mini';
+      }
+      if (
+        lowerModel.includes('mini') ||
+        lowerModel.includes('haiku') ||
+        lowerModel.includes('flash') ||
+        lowerModel.includes('3.5-turbo')
+      ) {
+        return 'gpt-4o-mini';
+      }
+      return 'gpt-4o';
+
+    case 'anthropic':
+      if (
+        lowerModel.includes('mini') ||
+        lowerModel.includes('haiku') ||
+        lowerModel.includes('flash') ||
+        lowerModel.includes('3.5-turbo')
+      ) {
+        return 'claude-3-5-haiku-20241022';
+      }
+      return 'claude-3-5-sonnet-20241022';
+
+    case 'lpgpt':
+      return 'gpt-5.3';
+
+    default:
+      // Fallback: use the first model ID in the provider's model list if available
+      if (targetProvider && targetProvider.models && targetProvider.models.length > 0) {
+        return targetProvider.models[0].id;
+      }
+      return originalModel;
+  }
+}
+

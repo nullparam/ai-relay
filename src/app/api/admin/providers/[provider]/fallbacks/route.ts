@@ -29,13 +29,15 @@ export async function GET(request: NextRequest, { params }: { params: Params }) 
     );
   }
 
-  const chain = await getFallbackChain(provider, config.fallbackProvider);
-  const isOverride = chain.length > 0 && (!config.fallbackProvider || chain[0] !== config.fallbackProvider || chain.length > 1);
+  const staticFallbacks = config.fallbackProviders || (config.fallbackProvider ? [config.fallbackProvider] : []);
+  const chain = await getFallbackChain(provider, staticFallbacks);
+  const isOverride = chain.length !== staticFallbacks.length || chain.some((val, idx) => val !== staticFallbacks[idx]);
 
   return Response.json({
     provider,
     fallbacks: chain,
-    staticDefault: config.fallbackProvider || null,
+    staticDefault: config.fallbackProvider || (config.fallbackProviders && config.fallbackProviders[0]) || null,
+    staticDefaults: staticFallbacks,
     isOverride,
   });
 }
@@ -116,9 +118,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
 
   await clearFallbackChain(provider);
 
+  const staticFallbacks = config.fallbackProviders || (config.fallbackProvider ? [config.fallbackProvider] : []);
+
   return Response.json({
     provider,
-    fallbacks: config.fallbackProvider ? [config.fallbackProvider] : [],
+    fallbacks: staticFallbacks,
     message: 'Fallback chain reset to static default',
   });
 }

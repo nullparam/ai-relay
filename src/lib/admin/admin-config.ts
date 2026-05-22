@@ -41,7 +41,7 @@ const PREFIX = {
  */
 export async function getFallbackChain(
   providerName: string,
-  staticFallback?: string
+  staticFallbacks?: string[] | string
 ): Promise<string[]> {
   try {
     const kv = await getKV();
@@ -60,8 +60,9 @@ export async function getFallbackChain(
   } catch {
     // fall through
   }
-  // Return static fallback as single-element array, or empty
-  return staticFallback ? [staticFallback] : [];
+  // Return static fallback as single-element array, or array if already array, or empty
+  if (Array.isArray(staticFallbacks)) return staticFallbacks;
+  return staticFallbacks ? [staticFallbacks] : [];
 }
 
 /**

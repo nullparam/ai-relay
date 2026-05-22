@@ -4,7 +4,7 @@
 
 import type { ChatCompletionRequest } from '../types';
 import type { RelayResult, ProviderConfig, ApiKey } from '../providers/types';
-import { resolveProvider, getUpstreamUrl, resolveModelAlias, PROVIDERS } from '../providers';
+import { resolveProvider, getUpstreamUrl, resolveModelAlias, resolveFallbackModel, PROVIDERS } from '../providers';
 import { selectKey, markCooldown, getKeyPool } from './key-pool';
 import { buildHeaders, transformToAnthropic } from './transform';
 import { RelayError } from '../errors';
@@ -74,16 +74,13 @@ export async function relayRequest(
     );
   }
 
-  // Resolve model alias
-  const resolvedModel = resolveModelAlias(body.model);
-
   // Retry with key rotation + exponential backoff
   const pool = await getKeyPool(provider);
   const maxRetries = Math.min(pool.keys.length, 3);
 
   // Try primary provider with retries (with concurrency control)
   const primaryResult = await withConcurrency(
-    () => tryProviderWithRetries(provider, body, resolvedModel, apiKey, maxRetries)
+    () => tryProviderWithRetries(provider, body, apiKey, maxRetries)
   );
   if (primaryResult.result) {
     return primaryResult.result;
@@ -91,7 +88,10 @@ export async function relayRequest(
 
   // If primary provider failed, try fallback chain from KV (or static default)
   const { getFallbackChain } = await import('../admin/admin-config');
-  const fallbackNames = await getFallbackChain(provider.name, provider.fallbackProvider);
+  const fallbackNames = await getFallbackChain(
+    provider.name,
+    provider.fallbackProviders || provider.fallbackProvider
+  );
 
   const errors: { provider: string; error: string }[] = [
     { provider: provider.displayName, error: primaryResult.lastError?.message || 'unknown error' },
@@ -121,7 +121,7 @@ export async function relayRequest(
     }
 
     const fbResult = await withConcurrency(
-      () => tryProviderWithRetries(fbProvider, body, resolvedModel, fbKey, fbMaxRetries)
+      () => tryProviderWithRetries(fbProvider, body, fbKey, fbMaxRetries)
     );
     if (fbResult.result) {
       return fbResult.result;
@@ -144,7 +144,6 @@ export async function relayRequest(
 async function tryProviderWithRetries(
   provider: ProviderConfig,
   body: ChatCompletionRequest,
-  resolvedModel: string,
   initialKey: ApiKey | null,
   maxRetries: number
 ): Promise<{ result: RelayResult | null; lastError: Error | null }> {
@@ -175,6 +174,10 @@ async function tryProviderWithRetries(
 
     const url = getUpstreamUrl(provider);
     const isAnthropic = provider.headerFormat === 'anthropic';
+
+    // Resolve target model and its alias for the current provider
+    const targetModel = resolveFallbackModel(body.model, provider.name);
+    const resolvedModel = resolveModelAlias(targetModel);
 
     // Transform request body if needed (use resolved model name)
     // Inject stream_options.include_usage for streaming so upstream returns usage in final SSE chunk

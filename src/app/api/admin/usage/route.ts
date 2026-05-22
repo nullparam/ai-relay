@@ -54,8 +54,9 @@ export async function GET(request: NextRequest) {
         available: pool.available,
       },
       errors,
-      hasFallback: !!config.fallbackProvider,
-      fallbackProvider: config.fallbackProvider || null,
+      hasFallback: !!(config.fallbackProviders?.length || config.fallbackProvider),
+      fallbackProvider: config.fallbackProvider || (config.fallbackProviders && config.fallbackProviders[0]) || null,
+      fallbackProviders: config.fallbackProviders || (config.fallbackProvider ? [config.fallbackProvider] : []),
     };
   });
 
