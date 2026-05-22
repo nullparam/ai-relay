@@ -106,6 +106,27 @@ async function getKV() {
 }
 
 /**
+ * Simple TTL cache for admin dashboard data.
+ * Serverless containers reuse module-level state across warm invocations.
+ */
+interface AdminCacheEntry {
+  data: unknown;
+  expiresAt: number;
+}
+const _adminCache = new Map<string, AdminCacheEntry>();
+const ADMIN_CACHE_TTL_MS = 30_000; // 30 seconds
+
+function getCached<T>(key: string): T | null {
+  const entry = _adminCache.get(key);
+  if (entry && Date.now() < entry.expiresAt) return entry.data as T;
+  return null;
+}
+
+function setCache(key: string, data: unknown, ttlMs = ADMIN_CACHE_TTL_MS): void {
+  _adminCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
+
+/**
  * KV-backed implementation of UsageStorage.
  */
 export class KVUsageStorage implements UsageStorage {
@@ -197,6 +218,10 @@ export class KVUsageStorage implements UsageStorage {
    * Get error stats for all providers (today).
    */
   async getErrorStats(): Promise<Record<string, Record<string, number>>> {
+    const cacheKey = `errorStats:${today()}`;
+    const cached = getCached<Record<string, Record<string, number>>>(cacheKey);
+    if (cached) return cached;
+
     try {
       const kv = await getKV();
       if (!kv) return {};
@@ -220,6 +245,7 @@ export class KVUsageStorage implements UsageStorage {
           }
         }
       }
+      setCache(cacheKey, result);
       return result;
     } catch {
       return {};
@@ -233,6 +259,10 @@ export class KVUsageStorage implements UsageStorage {
     keyHash: string;
     errors: Record<string, { count: number; reason: string }>;
   }>> {
+    const cacheKey = `keyErrors:${today()}`;
+    const cached = getCached<Array<{ keyHash: string; errors: Record<string, { count: number; reason: string }> }>>(cacheKey);
+    if (cached) return cached;
+
     try {
       const kv = await getKV();
       if (!kv) return [];
@@ -274,6 +304,7 @@ export class KVUsageStorage implements UsageStorage {
         }
       }
 
+      setCache(cacheKey, results);
       return results;
     } catch {
       return [];
@@ -284,6 +315,10 @@ export class KVUsageStorage implements UsageStorage {
     daily: { requests: number; tokens: number };
     total: { requests: number; tokens: number };
   } | null> {
+    const cacheKey = `keyUsage:${keyHash}:${today()}`;
+    const cached = getCached<{ daily: { requests: number; tokens: number }; total: { requests: number; tokens: number } }>(cacheKey);
+    if (cached) return cached;
+
     try {
       const kv = await getKV();
       if (!kv) return null;
@@ -292,7 +327,7 @@ export class KVUsageStorage implements UsageStorage {
       const dailyRaw = await kv.hgetall(`usage:${keyHash}:daily:${date}`);
       const totalRaw = await kv.hgetall(`usage:${keyHash}:total`);
 
-      return {
+      const result = {
         daily: {
           requests: Number(dailyRaw?.requests || 0),
           tokens: Number(dailyRaw?.tokens || 0),
@@ -302,6 +337,8 @@ export class KVUsageStorage implements UsageStorage {
           tokens: Number(totalRaw?.tokens || 0),
         },
       };
+      setCache(cacheKey, result);
+      return result;
     } catch {
       return null;
     }
@@ -314,6 +351,16 @@ export class KVUsageStorage implements UsageStorage {
     completionTokens: number;
     providers: Record<string, { requests: number; tokens: number; promptTokens: number; completionTokens: number }>;
   } | null> {
+    const cacheKey = `globalUsage:${today()}`;
+    const cached = getCached<{
+      requests: number;
+      tokens: number;
+      promptTokens: number;
+      completionTokens: number;
+      providers: Record<string, { requests: number; tokens: number; promptTokens: number; completionTokens: number }>;
+    }>(cacheKey);
+    if (cached) return cached;
+
     try {
       const kv = await getKV();
       if (!kv) return null;
@@ -342,13 +389,15 @@ export class KVUsageStorage implements UsageStorage {
         }
       }
 
-      return {
+      const result = {
         requests: Number(raw?.requests || 0),
         tokens: Number(raw?.tokens || 0),
         promptTokens: Number(raw?.promptTokens || 0),
         completionTokens: Number(raw?.completionTokens || 0),
         providers,
       };
+      setCache(cacheKey, result);
+      return result;
     } catch {
       return null;
     }
@@ -358,6 +407,10 @@ export class KVUsageStorage implements UsageStorage {
     range: string,
     granularity: 'day' | 'week' | 'month' = 'day'
   ): Promise<{ global: TrendPoint[]; providers: ProviderTrendPoint[] }> {
+    const cacheKey = `usageTrend:${range}:${granularity}:${today()}`;
+    const cached = getCached<{ global: TrendPoint[]; providers: ProviderTrendPoint[] }>(cacheKey);
+    if (cached) return cached;
+
     const kv = await getKV();
     if (!kv) {
       return { global: [], providers: [] };
@@ -397,7 +450,9 @@ export class KVUsageStorage implements UsageStorage {
       const activeProviders = providersDaily.filter((p) =>
         p.data.some((d) => d.totalTokens > 0)
       );
-      return { global: globalDaily, providers: activeProviders };
+      const result = { global: globalDaily, providers: activeProviders };
+      setCache(cacheKey, result);
+      return result;
     }
 
     const labelFn = granularity === 'week' ? getWeekLabel : getMonthLabel;
@@ -409,10 +464,16 @@ export class KVUsageStorage implements UsageStorage {
       }))
       .filter((p) => p.data.some((d) => d.totalTokens > 0));
 
-    return { global, providers };
+    const result = { global, providers };
+    setCache(cacheKey, result);
+    return result;
   }
 
   async checkQuota(): Promise<QuotaStatus> {
+    const cacheKey = `quota:${today()}`;
+    const cached = getCached<QuotaStatus>(cacheKey);
+    if (cached) return cached;
+
     const dailyLimit = parseInt(process.env.RELAY_DAILY_LIMIT || '0', 10) || 0;
     const monthlyLimit = parseInt(process.env.RELAY_MONTHLY_LIMIT || '0', 10) || 0;
     const kv = await getKV();
@@ -429,22 +490,27 @@ export class KVUsageStorage implements UsageStorage {
       (kv.get(`quota:monthly:${month}`) as Promise<number | null>).then((v) => v || 0),
     ]);
 
+    let result: QuotaStatus;
     if (dailyLimit > 0 && dailyUsed >= dailyLimit) {
       const now = new Date();
       const midnight = new Date(now);
       midnight.setUTCHours(24, 0, 0, 0);
       const retryAfter = Math.ceil((midnight.getTime() - now.getTime()) / 1000);
-      return { allowed: false, dailyUsed, dailyLimit, monthlyUsed, monthlyLimit, retryAfter };
-    }
-
-    if (monthlyLimit > 0 && monthlyUsed >= monthlyLimit) {
+      result = { allowed: false, dailyUsed, dailyLimit, monthlyUsed, monthlyLimit, retryAfter };
+    } else if (monthlyLimit > 0 && monthlyUsed >= monthlyLimit) {
       const now = new Date();
       const nextMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
       const retryAfter = Math.ceil((nextMonth.getTime() - now.getTime()) / 1000);
-      return { allowed: false, dailyUsed, dailyLimit, monthlyUsed, monthlyLimit, retryAfter };
+      result = { allowed: false, dailyUsed, dailyLimit, monthlyUsed, monthlyLimit, retryAfter };
+    } else {
+      result = { allowed: true, dailyUsed, dailyLimit, monthlyUsed, monthlyLimit };
     }
 
-    return { allowed: true, dailyUsed, dailyLimit, monthlyUsed, monthlyLimit };
+    // Only cache "allowed" results to avoid stale blocks
+    if (result.allowed) {
+      setCache(cacheKey, result, 15_000); // 15s for quota (shorter than admin cache)
+    }
+    return result;
   }
 
   private async incrementQuota(kv: Awaited<ReturnType<typeof getKV>>): Promise<void> {

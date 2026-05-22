@@ -3,7 +3,7 @@
 // ============================================================
 
 import { NextRequest } from 'next/server';
-import { getKeyPoolStats, initAllKeyPools } from '@/lib/relay';
+import { getKeyPoolStats, initAllKeyPools, getConcurrencyStats } from '@/lib/relay';
 import { getRateLimiterStats } from '@/lib/relay/rate-limiter';
 import { KVUsageStorage } from '@/lib/usage';
 import { PROVIDERS } from '@/lib/providers';

@@ -9,3 +9,4 @@ export {
   getRateLimiterStats,
   getBackoffDelay,
 } from './rate-limiter';
+export { getConcurrencyStats } from './concurrency';

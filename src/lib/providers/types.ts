@@ -15,7 +15,8 @@ export interface ProviderConfig {
   envKeyField: string;             // Env var name for API keys
   envBaseUrlField?: string;        // Env var name for custom base URL
   models?: ModelInfo[];            // Supported models list
-  fallbackProvider?: string;       // Fallback provider name when this one fails
+  fallbackProvider?: string;       // Fallback provider name when this one fails (single, legacy)
+  fallbackProviders?: string[];    // Chain of fallback providers (tried in order, supersede fallbackProvider)
 }
 
 /**

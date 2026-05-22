@@ -15,6 +15,7 @@ import {
   recordSuccess,
   backoffSleep,
 } from './rate-limiter';
+import { withConcurrency } from './concurrency';
 
 const usageStorage = new KVUsageStorage();
 
@@ -80,43 +81,61 @@ export async function relayRequest(
   const pool = getKeyPool(provider);
   const maxRetries = Math.min(pool.keys.length, 3);
 
-  // Try primary provider with retries
-  const primaryResult = await tryProviderWithRetries(provider, body, resolvedModel, apiKey, maxRetries);
+  // Try primary provider with retries (with concurrency control)
+  const primaryResult = await withConcurrency(
+    () => tryProviderWithRetries(provider, body, resolvedModel, apiKey, maxRetries)
+  );
   if (primaryResult.result) {
     return primaryResult.result;
   }
 
-  // If primary provider failed and has a fallback, try the fallback provider
-  if (provider.fallbackProvider) {
-    const fallbackProvider = PROVIDERS[provider.fallbackProvider];
-    if (fallbackProvider) {
-      console.log(`Primary provider ${provider.displayName} failed, trying fallback: ${fallbackProvider.displayName}`);
-      const fallbackKey = selectKey(fallbackProvider);
-      if (!fallbackKey) {
-        console.warn(`[fallback] ${fallbackProvider.displayName} has no API keys (env: ${fallbackProvider.envKeyField})`);
-      }
-      const fallbackPool = getKeyPool(fallbackProvider);
-      const fallbackMaxRetries = Math.min(fallbackPool.keys.length, 3);
-      if (fallbackMaxRetries === 0) {
-        console.warn(`[fallback] ${fallbackProvider.displayName} pool is empty, skipping fallback attempts`);
-      }
-      const fallbackResult = await tryProviderWithRetries(fallbackProvider, body, resolvedModel, fallbackKey, fallbackMaxRetries);
-      if (fallbackResult.result) {
-        return fallbackResult.result;
-      }
-      // Include both primary and fallback errors in the message
-      const primaryErr = primaryResult.lastError?.message || 'unknown error';
-      const fallbackErr = fallbackResult.lastError?.message || 'unknown error';
-      throw new RelayError(
-        `All retries failed — ${provider.displayName}: ${primaryErr}; fallback ${fallbackProvider.displayName}: ${fallbackErr}`,
-        'server_error',
-        502
-      );
+  // If primary provider failed, try fallback chain (array preferred, single field for backward compat)
+  const fallbackNames: string[] = provider.fallbackProviders?.length
+    ? provider.fallbackProviders
+    : provider.fallbackProvider
+      ? [provider.fallbackProvider]
+      : [];
+
+  const errors: { provider: string; error: string }[] = [
+    { provider: provider.displayName, error: primaryResult.lastError?.message || 'unknown error' },
+  ];
+
+  for (const fbName of fallbackNames) {
+    const fbProvider = PROVIDERS[fbName];
+    if (!fbProvider) {
+      console.warn(`[fallback] Unknown provider: ${fbName}, skipping`);
+      errors.push({ provider: fbName, error: 'Unknown provider' });
+      continue;
     }
+
+    console.log(`Trying fallback: ${fbProvider.displayName} (after ${provider.displayName} failed)`);
+    const fbKey = selectKey(fbProvider);
+    if (!fbKey) {
+      console.warn(`[fallback] ${fbProvider.displayName} has no API keys (env: ${fbProvider.envKeyField})`);
+      errors.push({ provider: fbProvider.displayName, error: 'No API keys configured' });
+      continue;
+    }
+    const fbPool = getKeyPool(fbProvider);
+    const fbMaxRetries = Math.min(fbPool.keys.length, 3);
+    if (fbMaxRetries === 0) {
+      console.warn(`[fallback] ${fbProvider.displayName} pool is empty, skipping`);
+      errors.push({ provider: fbProvider.displayName, error: 'Key pool empty' });
+      continue;
+    }
+
+    const fbResult = await withConcurrency(
+      () => tryProviderWithRetries(fbProvider, body, resolvedModel, fbKey, fbMaxRetries)
+    );
+    if (fbResult.result) {
+      return fbResult.result;
+    }
+    errors.push({ provider: fbProvider.displayName, error: fbResult.lastError?.message || 'unknown error' });
   }
 
+  // All providers failed — report every error
+  const detail = errors.map(e => `${e.provider}: ${e.error}`).join('; ');
   throw new RelayError(
-    `All retry attempts failed for ${provider.displayName}: ${primaryResult.lastError?.message || 'unknown error'}`,
+    `All providers failed — ${detail}`,
     'server_error',
     502
   );
