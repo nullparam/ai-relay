@@ -240,7 +240,8 @@ export default function WebhookList({
   };
 
   return (
-    <section className="glass-panel">
+    <>
+      <section className="glass-panel">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
           <h2 style={{ fontSize: '1.25rem', marginTop: 0, marginBottom: '0.5rem', color: '#fff', fontWeight: 600 }}>
@@ -397,6 +398,7 @@ export default function WebhookList({
           })}
         </div>
       )}
+      </section>
 
       {/* Add/Edit Modal */}
       {modalOpen && (
@@ -515,6 +517,6 @@ export default function WebhookList({
           </div>
         </div>
       )}
-    </section>
+    </>
   );
 }
