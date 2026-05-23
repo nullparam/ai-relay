@@ -283,14 +283,14 @@ Client → Edge Runtime (全球分发, <50ms 延迟)
 
 <!-- 团队成员信息开始 -->
 
-<img src="docs/assets/avatars/parsifal.png" width="100" height="100" alt="Parsifal">
+<img src="https://avatars.githubusercontent.com/u/35733668?v=4" width="100" height="100" alt="Parsifal">
 
 ### Parsifal
 - **角色**：创始人 & 项目负责人
 - **贡献**：项目发起人，负责整体架构设计、技术选型和团队管理
 - **联系**：zmw@izmw.me
 
-<img src="docs/assets/avatars/xiaohe.png" width="100" height="100" alt="小赫">
+<img src="https://avatars.githubusercontent.com/u/286714101?v=4" width="100" height="100" alt="小赫">
 
 ### 小赫
 - **角色**：协调者

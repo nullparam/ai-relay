@@ -283,14 +283,14 @@ Notes:
 
 <!-- Team members start -->
 
-<img src="docs/assets/avatars/parsifal.png" width="100" height="100" alt="Parsifal">
+<img src="https://avatars.githubusercontent.com/u/35733668?v=4" width="100" height="100" alt="Parsifal">
 
 ### Parsifal
 - **Role**: Founder & Project Lead
 - **Contribution**: Project initiator, responsible for overall architecture design, technology selection, and team management
 - **Contact**: zmw@izmw.me
 
-<img src="docs/assets/avatars/xiaohe.png" width="100" height="100" alt="小赫">
+<img src="https://avatars.githubusercontent.com/u/286714101?v=4" width="100" height="100" alt="小赫">
 
 ### 小赫 (Xiaohe)
 - **Role**: Coordinator
