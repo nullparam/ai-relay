@@ -413,6 +413,108 @@ export async function clearCustomQuota(): Promise<void> {
   await kv.del(PREFIX.quota);
 }
 
+// ── Webhook Notification Management ──────────────────────────
+
+import type { WebhookConfig, WebhookSettings, WebhookAlertThreshold } from '../webhooks/types';
+
+const WEBHOOK_PREFIX = 'admin:webhooks';      // admin:webhooks → JSON WebhookSettings
+
+const DEFAULT_SETTINGS: WebhookSettings = {
+  webhooks: [],
+  alertThresholds: [],
+  reportTime: '21:00',
+  reportTimezone: 'Asia/Shanghai',
+};
+
+/**
+ * Get all webhook settings from KV.
+ */
+export async function getWebhookSettings(): Promise<WebhookSettings> {
+  try {
+    const kv = await getKV();
+    if (kv) {
+      const raw = await withTimeout(
+        kv.get(WEBHOOK_PREFIX),
+        1000,
+        null,
+        'getWebhookSettings'
+      );
+      if (raw) {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return { ...DEFAULT_SETTINGS, ...parsed };
+      }
+    }
+  } catch {
+    // fall through
+  }
+  return { ...DEFAULT_SETTINGS };
+}
+
+/**
+ * Save the full webhook settings to KV.
+ */
+export async function saveWebhookSettings(settings: WebhookSettings): Promise<void> {
+  const kv = await getKV();
+  if (!kv) {
+    throw new Error('KV storage not configured — cannot persist webhook settings');
+  }
+  await kv.set(WEBHOOK_PREFIX, JSON.stringify(settings));
+}
+
+/**
+ * Add a new webhook config. Returns the new config with generated id.
+ */
+export async function addWebhook(config: Omit<WebhookConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<WebhookConfig> {
+  const settings = await getWebhookSettings();
+  const now = new Date().toISOString();
+  const newWebhook: WebhookConfig = {
+    ...config,
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  settings.webhooks.push(newWebhook);
+  await saveWebhookSettings(settings);
+  return newWebhook;
+}
+
+/**
+ * Update an existing webhook config by id.
+ */
+export async function updateWebhook(id: string, updates: Partial<Omit<WebhookConfig, 'id' | 'createdAt'>>): Promise<WebhookConfig | null> {
+  const settings = await getWebhookSettings();
+  const idx = settings.webhooks.findIndex(w => w.id === id);
+  if (idx < 0) return null;
+  settings.webhooks[idx] = {
+    ...settings.webhooks[idx],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveWebhookSettings(settings);
+  return settings.webhooks[idx];
+}
+
+/**
+ * Delete a webhook config by id.
+ */
+export async function deleteWebhook(id: string): Promise<boolean> {
+  const settings = await getWebhookSettings();
+  const before = settings.webhooks.length;
+  settings.webhooks = settings.webhooks.filter(w => w.id !== id);
+  if (settings.webhooks.length === before) return false;
+  await saveWebhookSettings(settings);
+  return true;
+}
+
+/**
+ * Update alert thresholds.
+ */
+export async function saveAlertThresholds(thresholds: WebhookAlertThreshold[]): Promise<void> {
+  const settings = await getWebhookSettings();
+  settings.alertThresholds = thresholds;
+  await saveWebhookSettings(settings);
+}
+
 // ── Custom Providers Management ──────────────────────────────
 
 /**

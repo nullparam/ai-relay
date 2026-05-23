@@ -1,6 +1,7 @@
 # AI Relay ⚡
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ParsifalC/ai-relay&env=RELAY_API_KEY,RELAY_ADMIN_KEY,RELAY_SIGNING_SECRET&envDescription=API%20authentication%20keys%20(required%20for%20security)&envLink=https://github.com/ParsifalC/ai-relay#environment-variables)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 轻量级 AI API 中转服务，部署在 Vercel (Edge Runtime + KV)。
 A lightweight AI API relay service, deployed on Vercel (Edge Runtime + KV).
@@ -12,18 +13,32 @@ A lightweight AI API relay service, deployed on Vercel (Edge Runtime + KV).
 <a name="english"></a>
 ## English
 
-### Features
+### ✨ Features
 
-- 🔄 **Multi-Key Rotation** — Round-Robin + 429 auto-backoff.
-- 🔀 **Multi-Provider Routing** — OpenAI / Claude / DeepSeek / MiMo.
-- 📊 **Usage Tracking** — Request count + token usage (Vercel KV).
-- 📡 **Streaming Responses** — SSE pass-through.
-- 🛡️ **OpenAI Compatible** — Connects directly via OpenAI SDK.
-- 🔑 **Key Segregation & Temporary Keys** — Separate admin panel keys, api request keys, and support for generating stateless temporary keys.
+- 🔄 **Multi-Key Rotation** — Round-Robin + 429 auto-backoff
+- 🔀 **Multi-Provider Routing** — OpenAI / Claude / DeepSeek / MiMo / Custom Providers
+- 🛡️ **Multi-Level Fallback** — Provider-level + Key-level fallback with chain failover
+- ⚡ **Circuit Breaker** — Automatic failover when provider is down
+- 📊 **Admin Dashboard** — Full-featured management panel at `/admin`
+  - Key management (add/delete/test connectivity)
+  - Quota configuration (dynamic quota override, KV persistence)
+  - Model connectivity testing
+  - Temporary API key generation
+  - Custom provider management (CRUD)
+  - Real-time Key Pool sync
+  - Deployment time and model availability status
+- 📈 **Usage Tracking** — Request count + token usage (Vercel KV)
+- 📡 **Streaming Responses** — SSE pass-through
+- 🔗 **OpenAI Compatible** — Works directly with OpenAI SDK
+- 🔑 **Key Segregation** — Separate admin/API/temporary keys
+- 🏥 **Health Check** — `/health` endpoint for monitoring
+- 🌐 **Custom Base URL** — Support custom API base URLs
+- 🎭 **Virtual Model Mapping** — Map virtual model names to real models
+- 🚀 **One-Click Deploy** — Deploy to Vercel in under 2 minutes
 
-### ⚡ Quick Deploy (One Click)
+### 🚀 Quick Start
 
-Deploy to Vercel in under 2 minutes — no coding required.
+#### One-Click Deploy (Recommended)
 
 **Prerequisites:**
 - A [Vercel account](https://vercel.com/signup) (free tier works)
@@ -43,7 +58,34 @@ Deploy to Vercel in under 2 minutes — no coding required.
 3. In the Admin panel, go to **Provider Keys** and add your API keys (OpenAI, Claude, etc.)
 4. Start making requests!
 
-**Usage Example:**
+#### Manual Setup
+
+```bash
+# Clone & Install
+git clone https://github.com/ParsifalC/ai-relay.git
+cd ai-relay
+npm install
+
+# Configure Environment Variables
+cp .env.local.example .env.local
+# Edit .env.local and fill in your API Keys
+
+# Local Development
+npm run dev
+# Visit http://localhost:3000
+
+# Deploy to Vercel
+npx vercel
+```
+
+### 📖 Usage
+
+#### API Endpoint
+```
+POST https://your-project.vercel.app/v1/chat/completions
+```
+
+#### Using curl
 ```bash
 curl -X POST https://your-project.vercel.app/v1/chat/completions \
   -H "Authorization: Bearer YOUR_RELAY_API_KEY" \
@@ -54,7 +96,7 @@ curl -X POST https://your-project.vercel.app/v1/chat/completions \
   }'
 ```
 
-**Using OpenAI SDK:**
+#### Using OpenAI SDK
 ```python
 from openai import OpenAI
 
@@ -69,36 +111,17 @@ response = client.chat.completions.create(
 )
 ```
 
-### Manual Setup
+#### Temporary Keys
+Generate temporary keys in the Admin panel with specified durations:
+- **Format**: `***${base64Payload}.${signature}`
+- **Validation**: Stateless HMAC-SHA256 verification on Vercel Edge
 
-#### 1. Clone & Install
-```bash
-git clone https://github.com/ParsifalC/ai-relay.git
-cd ai-relay
-npm install
-```
+### 🔧 Configuration
 
-#### 2. Configure Environment Variables
-```bash
-cp .env.local.example .env.local
-# Edit .env.local and fill in your API Keys
-```
-
-#### 3. Local Development
-```bash
-npm run dev
-# Visit http://localhost:3000
-```
-
-#### 4. Deploy to Vercel
-```bash
-npx vercel
-```
-
-### Environment Variables
+#### Environment Variables
 
 | Variable | Description | Required |
-|------|------|------|
+|----------|-------------|----------|
 | `RELAY_API_KEY` | Client request auth key (comma-separated) | ✅ |
 | `RELAY_ADMIN_KEY` | Admin dashboard login key (comma-separated, falls back to `RELAY_API_KEY` if not set) | ⬜ |
 | `RELAY_SIGNING_SECRET` | Secret for signing temporary keys (falls back to admin/api key if not set) | ⬜ |
@@ -109,28 +132,78 @@ npx vercel
 
 > **Note:** Provider keys (OPENAI_KEYS, etc.) are configured via the Admin panel after deployment, not as Vercel environment variables. This is more secure — keys are stored in Vercel KV, not in your repo.
 
-### Temporary Request Keys
-You can generate temporary client request keys in the Admin Panel with specified durations (e.g. 1 hour, 1 day). 
-- **Format**: `***${base64Payload}.${signature}`
-- **Validation**: Statelessly validated using HMAC-SHA256 on the Vercel Edge.
+#### Custom Providers
+Add custom providers in the Admin panel with:
+- Provider name
+- API base URL
+- API key
+- Supported models
+
+### 🏗️ Architecture
+
+AI Relay runs on Vercel Edge Runtime for low latency, with Vercel KV for persistent storage:
+- **Edge Runtime**: Global distribution, <50ms latency
+- **Vercel KV**: Redis-compatible storage for keys, quotas, and usage data
+- **Circuit Breaker**: Automatic failover when provider is down
+- **Multi-Level Fallback**: Provider → Key chain failover
+
+### 📊 Admin Dashboard
+
+Access the admin panel at `/admin` with your `RELAY_ADMIN_KEY`:
+
+- **Provider Keys**: Manage API keys for all providers
+- **Quota Configuration**: Set dynamic quotas per provider
+- **Model Testing**: Test connectivity to specific models
+- **Temporary Keys**: Generate time-limited API keys
+- **Custom Providers**: Add/edit/delete custom providers
+- **Usage Statistics**: View request counts and token usage
+- **Key Pool Status**: Real-time sync status of all keys
+
+### 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
 <a name="中文"></a>
 ## 中文
 
-### 特性
+### ✨ 特性
 
 - 🔄 **多 Key 轮换** — Round-Robin + 429 自动退避
-- 🔀 **多 Provider 路由** — OpenAI / Claude / DeepSeek / MiMo
-- 📊 **用量追踪** — 调用次数 + Token 用量 (Vercel KV)
+- 🔀 **多 Provider 路由** — OpenAI / Claude / DeepSeek / MiMo / 自定义 Provider
+- 🛡️ **多级 Fallback** — Provider 级 + Key 级链式故障转移
+- ⚡ **熔断器** — Provider 故障时自动切换
+- 📊 **Admin 后台** — 全功能管理面板 `/admin`
+  - 密钥管理（添加/删除/测试连通性）
+  - 配额配置（动态配额覆盖，KV 持久化）
+  - 模型连通性测试
+  - 临时 API Key 生成
+  - 自定义 Provider 管理（CRUD）
+  - 实时 Key Pool 同步
+  - 部署时间和模型可用性状态
+- 📈 **用量追踪** — 调用次数 + Token 用量 (Vercel KV)
 - 📡 **流式响应** — SSE 透传
-- 🛡️ **OpenAI 兼容** — 直接用 OpenAI SDK 对接
-- 🔑 **密钥分离与临时 Key** — 区分后台管理密钥和 API 请求密钥，并支持在后台生成无状态的临时密钥。
+- 🔗 **OpenAI 兼容** — 直接用 OpenAI SDK 对接
+- 🔑 **密钥分离** — 区分 Admin Key / API Key / 临时 Key
+- 🏥 **健康检查** — `/health` 端点用于监控
+- 🌐 **自定义 Base URL** — 支持自定义 API 基础地址
+- 🎭 **虚拟模型映射** — 将虚拟模型名映射到真实模型
+- 🚀 **一键部署** — 2 分钟内部署到 Vercel
 
-### ⚡ 一键部署
+### 🚀 快速开始
 
-2 分钟内部署到 Vercel，无需写代码。
+#### 一键部署（推荐）
 
 **前置条件：**
 - 一个 [Vercel 账号](https://vercel.com/signup)（免费版即可）
@@ -150,7 +223,34 @@ You can generate temporary client request keys in the Admin Panel with specified
 3. 在后台面板的 **Provider Keys** 中添加你的 API Key（OpenAI、Claude 等）
 4. 开始调用！
 
-**使用示例：**
+#### 手动部署
+
+```bash
+# 克隆 & 安装
+git clone https://github.com/ParsifalC/ai-relay.git
+cd ai-relay
+npm install
+
+# 配置环境变量
+cp .env.local.example .env.local
+# 编辑 .env.local 填入你的 API Keys
+
+# 本地开发
+npm run dev
+# 访问 http://localhost:3000
+
+# 部署到 Vercel
+npx vercel
+```
+
+### 📖 使用方法
+
+#### API 端点
+```
+POST https://你的项目.vercel.app/v1/chat/completions
+```
+
+#### 使用 curl
 ```bash
 curl -X POST https://你的项目.vercel.app/v1/chat/completions \
   -H "Authorization: Bearer YOUR_RELAY_API_KEY" \
@@ -161,7 +261,7 @@ curl -X POST https://你的项目.vercel.app/v1/chat/completions \
   }'
 ```
 
-**使用 OpenAI SDK：**
+#### 使用 OpenAI SDK
 ```python
 from openai import OpenAI
 
@@ -176,33 +276,14 @@ response = client.chat.completions.create(
 )
 ```
 
-### 手动部署
+#### 临时密钥
+在后台面板中生成指定有效期的临时密钥：
+- **格式**：`***${base64Payload}.${signature}`
+- **校验**：在 Vercel Edge 服务端采用 HMAC-SHA256 算法进行无状态签名校验
 
-#### 1. 克隆 & 安装
-```bash
-git clone https://github.com/ParsifalC/ai-relay.git
-cd ai-relay
-npm install
-```
+### 🔧 配置
 
-#### 2. 配置环境变量
-```bash
-cp .env.local.example .env.local
-# 编辑 .env.local 填入你的 API Keys
-```
-
-#### 3. 本地开发
-```bash
-npm run dev
-# 访问 http://localhost:3000
-```
-
-#### 4. 部署到 Vercel
-```bash
-npx vercel
-```
-
-### 环境变量
+#### 环境变量
 
 | 变量 | 说明 | 必填 |
 |------|------|------|
@@ -216,7 +297,43 @@ npx vercel
 
 > **注意：** Provider 密钥（OPENAI_KEYS 等）建议通过 Admin 后台面板配置，而非 Vercel 环境变量。这样更安全 — 密钥存储在 Vercel KV 中，不暴露在代码仓库里。
 
-### 临时请求密钥
-在后台面板中可以生成指定有效期的临时请求密钥（例如 1小时、1天）。
-- **格式**：`***${base64Payload}.${signature}`
-- **校验**：在 Vercel Edge 服务端采用 HMAC-SHA256 算法进行无状态签名校验。
+#### 自定义 Provider
+在后台面板中添加自定义 Provider：
+- Provider 名称
+- API 基础地址
+- API 密钥
+- 支持的模型列表
+
+### 🏗️ 架构
+
+AI Relay 运行在 Vercel Edge Runtime 上，实现低延迟全球分发，使用 Vercel KV 进行持久化存储：
+- **Edge Runtime**：全球分发，延迟 <50ms
+- **Vercel KV**：兼容 Redis 的存储，用于密钥、配额和用量数据
+- **熔断器**：Provider 故障时自动切换
+- **多级 Fallback**：Provider → Key 链式故障转移
+
+### 📊 Admin 后台
+
+访问 `/admin` 使用 `RELAY_ADMIN_KEY` 登录管理面板：
+
+- **Provider Keys**：管理所有 Provider 的 API 密钥
+- **配额配置**：为每个 Provider 设置动态配额
+- **模型测试**：测试特定模型的连通性
+- **临时密钥**：生成有时效的 API 密钥
+- **自定义 Provider**：添加/编辑/删除自定义 Provider
+- **用量统计**：查看请求次数和 Token 用量
+- **Key Pool 状态**：实时同步所有密钥状态
+
+### 🤝 贡献
+
+欢迎贡献！请随时提交 Pull Request。
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add some amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 提交 Pull Request
+
+### 📄 许可证
+
+本项目基于 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
