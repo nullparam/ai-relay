@@ -41,7 +41,7 @@ function clearCache(prefix?: string): void {
 
 export function createMemoryMockKV() {
   const store = new Map<string, any>();
-  return {
+  const result: any = {
     async get(key: string) {
       return store.get(key) ?? null;
     },
@@ -130,8 +130,30 @@ export function createMemoryMockKV() {
         return Array.from(current);
       }
       return [];
+    },
+    pipeline() {
+      const commands: Array<() => Promise<any>> = [];
+      const proxy: any = new Proxy({}, {
+        get(target, prop) {
+          if (prop === 'exec') {
+            return async () => {
+              return Promise.all(commands.map((cmd) => cmd()));
+            };
+          }
+          const method = result[prop];
+          if (typeof method === 'function') {
+            return (...args: any[]) => {
+              commands.push(() => method(...args));
+              return proxy;
+            };
+          }
+          throw new Error(`Mock pipeline method not implemented: ${String(prop)}`);
+        }
+      });
+      return proxy;
     }
   };
+  return result;
 }
 
 async function getKV() {
@@ -277,44 +299,43 @@ export async function getManagedKeys(providerName: string, forceRefresh = false)
   const cached = forceRefresh ? null : getCached<string[] | null>(cacheKey);
   if (cached !== null) return cached;
 
-  try {
-    const kv = await getKV();
-    if (kv) {
-      const raw = await withTimeout(
-        kv.get(`${PREFIX.keys}${providerName}`),
-        1000,
-        null,
-        `getManagedKeys:${providerName}`
-      );
-      if (raw) {
-        const parsed = parseJsonOrArray(raw);
-        if (parsed) {
-          setCached(cacheKey, parsed);
-          return parsed;
-        }
+  const kv = await getKV();
+  if (kv) {
+    const raw = await withTimeout(
+      kv.get(`${PREFIX.keys}${providerName}`),
+      1000,
+      undefined,
+      `getManagedKeys:${providerName}`
+    );
+    if (raw === undefined) {
+      throw new Error(`Timeout fetching managed keys for ${providerName}`);
+    }
+    if (raw) {
+      const parsed = parseJsonOrArray(raw);
+      if (parsed) {
+        setCached(cacheKey, parsed);
+        return parsed;
       }
     }
-  } catch {
-    // fall through
+    setCached(cacheKey, null);
+    return null;
   }
-  setCached(cacheKey, null);
-  return null;
+  throw new Error('KV storage not configured');
 }
 
 export async function getManagedKeysVersion(providerName: string): Promise<number> {
-  try {
-    const kv = await getKV();
-    if (!kv) return 0;
-    const raw = await withTimeout(
-      kv.get(`${PREFIX.keyVersion}${providerName}`),
-      1000,
-      0,
-      `getManagedKeysVersion:${providerName}`
-    );
-    return Number(raw || 0);
-  } catch {
-    return 0;
+  const kv = await getKV();
+  if (!kv) throw new Error('KV storage not configured');
+  const raw = await withTimeout(
+    kv.get(`${PREFIX.keyVersion}${providerName}`),
+    1000,
+    undefined,
+    `getManagedKeysVersion:${providerName}`
+  );
+  if (raw === undefined) {
+    throw new Error(`Timeout fetching key version for ${providerName}`);
   }
+  return Number(raw || 0);
 }
 
 async function bumpManagedKeysVersion(providerName: string, kv?: any): Promise<number> {

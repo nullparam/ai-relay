@@ -133,30 +133,93 @@ const _adminCache = new Map<string, AdminCacheEntry>();
 const ADMIN_CACHE_TTL_MS = 30_000;
 const TREND_CACHE_TTL_MS = 120_000;
 const QUOTA_CACHE_TTL_MS = 30_000;
+const ADMIN_CACHE_CLEANUP_INTERVAL_MS = 60_000;
+const ADMIN_CACHE_MAX_ENTRIES = 500;
+let lastAdminCacheCleanup = 0;
+
+function pruneAdminCache(now = Date.now(), force = false): void {
+  if (
+    !force &&
+    now - lastAdminCacheCleanup < ADMIN_CACHE_CLEANUP_INTERVAL_MS &&
+    _adminCache.size <= ADMIN_CACHE_MAX_ENTRIES
+  ) {
+    return;
+  }
+
+  lastAdminCacheCleanup = now;
+  for (const [key, entry] of _adminCache.entries()) {
+    if (now >= entry.expiresAt) {
+      _adminCache.delete(key);
+    }
+  }
+
+  if (_adminCache.size <= ADMIN_CACHE_MAX_ENTRIES) return;
+
+  const overflow = _adminCache.size - ADMIN_CACHE_MAX_ENTRIES;
+  let removed = 0;
+  for (const key of _adminCache.keys()) {
+    _adminCache.delete(key);
+    removed += 1;
+    if (removed >= overflow) break;
+  }
+}
 
 function getCached<T>(key: string): T | null {
+  const now = Date.now();
   const entry = _adminCache.get(key);
-  if (entry && Date.now() < entry.expiresAt) return entry.data as T;
+  if (entry) {
+    if (now < entry.expiresAt) {
+      pruneAdminCache(now);
+      return entry.data as T;
+    }
+    _adminCache.delete(key);
+  }
+  pruneAdminCache(now);
   return null;
 }
 
 function setCache(key: string, data: unknown, ttlMs = ADMIN_CACHE_TTL_MS): void {
-  _adminCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  const now = Date.now();
+  pruneAdminCache(now);
+  _adminCache.set(key, { data, expiresAt: now + ttlMs });
+  if (_adminCache.size > ADMIN_CACHE_MAX_ENTRIES) {
+    pruneAdminCache(now, true);
+  }
 }
 
 function clearUsageReadCaches(): void {
-  for (const key of _adminCache.keys()) {
+  const now = Date.now();
+  pruneAdminCache(now, true);
+  for (const [key, entry] of _adminCache.entries()) {
+    if (now >= entry.expiresAt) {
+      _adminCache.delete(key);
+      continue;
+    }
     if (
       key.startsWith('globalUsage:') ||
       key.startsWith('usageTrend:') ||
       key.startsWith('quota:') ||
       key.startsWith('errorStats:') ||
-      key.startsWith('keyErrors:')
+      key.startsWith('keyErrors:') ||
+      key.startsWith('keyUsage:')
     ) {
       _adminCache.delete(key);
     }
   }
 }
+
+export const __usageStorageCacheForTests = {
+  clear(): void {
+    _adminCache.clear();
+    lastAdminCacheCleanup = 0;
+  },
+  set(key: string, data: unknown, ttlMs = ADMIN_CACHE_TTL_MS): void {
+    setCache(key, data, ttlMs);
+  },
+  size(): number {
+    return _adminCache.size;
+  },
+};
 
 const QUOTA_CRITICAL_RATIO = 0.85;
 const QUOTA_CRITICAL_REMAINING = 500;
@@ -518,17 +581,21 @@ export class KVUsageStorage implements UsageStorage {
       const result: Record<string, Record<string, number>> = {};
       const allProviders = await getAllProviders();
       const providerNames = Object.keys(allProviders);
-      const providerResults = await withTimeout(
-        Promise.all(providerNames.map(async (provider) => {
-          const raw = await kv.hgetall(kvKeys.errorProviderDaily(provider, date));
-          return { provider, raw };
-        })),
+
+      const p = kv.pipeline();
+      for (const provider of providerNames) {
+        p.hgetall(kvKeys.errorProviderDaily(provider, date));
+      }
+      const rawResults = await withTimeout(
+        p.exec(),
         1000,
         [],
-        'getErrorStats:hgetall'
+        'getErrorStats:pipeline'
       );
 
-      for (const { provider, raw } of providerResults) {
+      for (let i = 0; i < providerNames.length; i++) {
+        const provider = providerNames[i];
+        const raw = rawResults[i] as Record<string, unknown> | null;
         if (raw && Object.keys(raw).length > 0) {
           result[provider] = {};
           for (const [code, count] of Object.entries(raw)) {
@@ -565,15 +632,15 @@ export class KVUsageStorage implements UsageStorage {
       );
       if (!keyHashes || keyHashes.length === 0) return [];
 
-      const keyResults = await withTimeout(
-        Promise.all(keyHashes.map(async (keyHash: string) => {
-          const redisKey = kvKeys.legacyErrorKeyDaily(keyHash, date);
-          const raw = await kv.hgetall(redisKey);
-          return { keyHash, raw };
-        })),
+      const p = kv.pipeline();
+      for (const keyHash of keyHashes) {
+        p.hgetall(kvKeys.legacyErrorKeyDaily(keyHash, date));
+      }
+      const rawResults = await withTimeout(
+        p.exec(),
         1000,
         [],
-        'getKeyErrors:hgetall'
+        'getKeyErrors:pipeline'
       );
 
       const results: Array<{
@@ -581,7 +648,9 @@ export class KVUsageStorage implements UsageStorage {
         errors: Record<string, { count: number; reason: string }>;
       }> = [];
 
-      for (const { keyHash, raw } of keyResults) {
+      for (let i = 0; i < keyHashes.length; i++) {
+        const keyHash = keyHashes[i];
+        const raw = rawResults[i] as Record<string, unknown> | null;
         if (!raw) continue;
         const errors: Record<string, { count: number; reason: string }> = {};
         for (const [field, value] of Object.entries(raw)) {
@@ -648,21 +717,25 @@ export class KVUsageStorage implements UsageStorage {
       const date = today();
       const allProviders = await getAllProviders();
       const providerNames = Object.keys(allProviders);
-      const [raw, providerResults] = await withTimeout(
-        Promise.all([
-          kv.hgetall(kvKeys.usageDaily(date)) as Promise<Record<string, unknown> | null>,
-          Promise.all(providerNames.map(async (provider) => {
-            const pRaw = await kv.hgetall(kvKeys.usageProviderDaily(provider, date));
-            return { provider, raw: pRaw };
-          })),
-        ]),
+
+      const p = kv.pipeline();
+      p.hgetall(kvKeys.usageDaily(date));
+      for (const provider of providerNames) {
+        p.hgetall(kvKeys.usageProviderDaily(provider, date));
+      }
+
+      const rawResults = await withTimeout(
+        p.exec(),
         1000,
-        [null, []] as [Record<string, unknown> | null, Array<{ provider: string; raw: Record<string, unknown> | null }>],
-        'getGlobalUsage'
+        [],
+        'getGlobalUsage:pipeline'
       );
 
+      const raw = rawResults[0] as Record<string, unknown> | null;
       const providers: Record<string, { requests: number; tokens: number; promptTokens: number; completionTokens: number }> = {};
-      for (const { provider, raw: pRaw } of providerResults) {
+      for (let i = 0; i < providerNames.length; i++) {
+        const provider = providerNames[i];
+        const pRaw = rawResults[i + 1] as Record<string, unknown> | null;
         const req = Number(pRaw?.requests || 0);
         if (req > 0) {
           providers[provider] = {
@@ -713,24 +786,43 @@ export class KVUsageStorage implements UsageStorage {
     try {
       const allProviders = await getAllProviders();
       const providerNames = Object.keys(allProviders);
-      const [globalDaily, providersDaily] = await withTimeout(
-        Promise.all([
-          Promise.all(dates.map(async (date) => {
-            const raw = await kv.hgetall(kvKeys.usageDaily(date));
-            return parseDailyPoint(date, raw as Record<string, unknown> | null);
-          })),
-          Promise.all(providerNames.map(async (provider) => {
-            const data = await Promise.all(dates.map(async (date) => {
-              const raw = await kv.hgetall(kvKeys.usageProviderDaily(provider, date));
-              return parseDailyPoint(date, raw as Record<string, unknown> | null);
-            }));
-            return { provider, data };
-          })),
-        ]),
+
+      const p = kv.pipeline();
+      for (const date of dates) {
+        p.hgetall(kvKeys.usageDaily(date));
+      }
+      for (const provider of providerNames) {
+        for (const date of dates) {
+          p.hgetall(kvKeys.usageProviderDaily(provider, date));
+        }
+      }
+
+      const rawResults = await withTimeout(
+        p.exec(),
         2000,
-        [[], []] as [TrendPoint[], Array<{ provider: string; data: TrendPoint[] }>],
-        'getUsageTrend'
+        [],
+        'getUsageTrend:pipeline'
       );
+
+      const globalDaily: TrendPoint[] = [];
+      for (let i = 0; i < dates.length; i++) {
+        const date = dates[i];
+        const raw = rawResults[i] as Record<string, unknown> | null;
+        globalDaily.push(parseDailyPoint(date, raw));
+      }
+
+      const providersDaily: Array<{ provider: string; data: TrendPoint[] }> = [];
+      let offset = dates.length;
+      for (const provider of providerNames) {
+        const data: TrendPoint[] = [];
+        for (let i = 0; i < dates.length; i++) {
+          const date = dates[i];
+          const raw = rawResults[offset + i] as Record<string, unknown> | null;
+          data.push(parseDailyPoint(date, raw));
+        }
+        offset += dates.length;
+        providersDaily.push({ provider, data });
+      }
 
       if (granularity === 'day') {
         const activeProviders = providersDaily.filter((p) => p.data.some((d) => d.totalTokens > 0));
@@ -796,7 +888,9 @@ export class KVUsageStorage implements UsageStorage {
         ? { allowed: true, dailyUsed: quota.dailyUsed, dailyLimit, monthlyUsed: quota.monthlyUsed, monthlyLimit, isOverride }
         : buildQuotaResult(quota.dailyUsed, dailyLimit, quota.monthlyUsed, monthlyLimit, isOverride);
 
-      if (!reserve && result.allowed && !shouldRecheckQuota(result.dailyUsed, dailyLimit, result.monthlyUsed, monthlyLimit)) {
+      if (reserve && quota.allowed) {
+        clearUsageReadCaches();
+      } else if (!reserve && result.allowed && !shouldRecheckQuota(result.dailyUsed, dailyLimit, result.monthlyUsed, monthlyLimit)) {
         setCache(cacheKey, result, QUOTA_CACHE_TTL_MS);
       }
       return result;
@@ -816,30 +910,30 @@ export class KVUsageStorage implements UsageStorage {
 
     const allProviders = await getAllProviders();
     const providerNames = Object.keys(allProviders);
-    const [globalRaw, providerResults, yesterdayRaw] = await withTimeout(
-      Promise.all([
-        kv.hgetall(kvKeys.usageDaily(date)) as Promise<Record<string, unknown> | null>,
-        Promise.all(providerNames.map(async (provider) => {
-          const raw = await kv.hgetall(kvKeys.usageProviderDaily(provider, date));
-          return { provider, raw };
-        })),
-        kv.hgetall(kvKeys.usageDaily(previousDate(date))) as Promise<Record<string, unknown> | null>,
-      ]),
+
+    const p = kv.pipeline();
+    p.hgetall(kvKeys.usageDaily(date));
+    for (const provider of providerNames) {
+      p.hgetall(kvKeys.usageProviderDaily(provider, date));
+    }
+    p.hgetall(kvKeys.usageDaily(previousDate(date)));
+
+    const rawResults = await withTimeout(
+      p.exec(),
       2000,
-      [null, [], null] as [
-        Record<string, unknown> | null,
-        Array<{ provider: string; raw: Record<string, unknown> | null }>,
-        Record<string, unknown> | null,
-      ],
-      'getDailyReport'
+      [],
+      'getDailyReport:pipeline'
     );
 
+    const globalRaw = rawResults[0] as Record<string, unknown> | null;
     if (!globalRaw || Object.keys(globalRaw).length === 0) return null;
 
     const totalRequests = Number(globalRaw.requests ?? 0);
     const totalTokens = Number(globalRaw.tokens ?? 0);
     const providers: DailyReportData['providers'] = {};
-    for (const { provider, raw } of providerResults) {
+    for (let i = 0; i < providerNames.length; i++) {
+      const provider = providerNames[i];
+      const raw = rawResults[i + 1] as Record<string, unknown> | null;
       if (!raw || Object.keys(raw).length === 0) continue;
       providers[provider] = {
         requests: Number(raw.requests ?? 0),
@@ -849,6 +943,7 @@ export class KVUsageStorage implements UsageStorage {
       };
     }
 
+    const yesterdayRaw = rawResults[1 + providerNames.length] as Record<string, unknown> | null;
     const yesterdayComparison = yesterdayRaw && Object.keys(yesterdayRaw).length > 0
       ? {
           requestsChange: totalRequests > 0 && Number(yesterdayRaw.requests ?? 0) > 0

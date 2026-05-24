@@ -54,11 +54,13 @@ function parseKeys(envValue: string | undefined, provider: string): ApiKey[] {
 /**
  * Try to load managed keys from admin KV config.
  * Returns null if KV is not configured or no managed keys exist.
+ * Returns undefined if an error / network exception occurs.
  */
-async function loadManagedKeys(providerName: string, forceRefresh = false): Promise<ApiKey[] | null> {
+async function loadManagedKeys(providerName: string, forceRefresh = false): Promise<ApiKey[] | null | undefined> {
   try {
     const { getManagedKeys } = await import('../admin/admin-config');
     const managed = await getManagedKeys(providerName, forceRefresh);
+    if (managed === undefined) return undefined;
     if (managed !== null) {
       return managed.map((key) => ({
         key,
@@ -66,18 +68,20 @@ async function loadManagedKeys(providerName: string, forceRefresh = false): Prom
         provider: providerName,
       }));
     }
+    return null;
   } catch {
-    // admin-config not available or KV not configured
+    return undefined;
   }
-  return null;
 }
 
-async function loadManagedKeysVersion(providerName: string): Promise<number> {
+async function loadManagedKeysVersion(providerName: string): Promise<number | undefined> {
   try {
     const { getManagedKeysVersion } = await import('../admin/admin-config');
-    return await getManagedKeysVersion(providerName);
+    const version = await getManagedKeysVersion(providerName);
+    if (version === undefined) return undefined;
+    return version;
   } catch {
-    return knownManagedVersions.get(providerName) || 0;
+    return undefined;
   }
 }
 
@@ -104,35 +108,57 @@ export async function getKeyPool(config: ProviderConfig, forceRefresh = false): 
   if (existing && !forceRefresh) {
     const lastCheck = lastManagedVersionCheck.get(config.name) || 0;
     if (Date.now() - lastCheck > keyVersionCheckTtlMs()) {
-      lastManagedVersionCheck.set(config.name, Date.now());
-      const remoteVersion = await loadManagedKeysVersion(config.name);
-      const knownVersion = knownManagedVersions.get(config.name) || 0;
-      if (remoteVersion !== knownVersion) {
-        const managed = await loadManagedKeys(config.name, true);
-        if (managed) {
-          existing.keys = managed;
-        } else {
-          existing.keys = parseKeys(process.env[config.envKeyField], config.name);
+      try {
+        const remoteVersion = await loadManagedKeysVersion(config.name);
+        if (remoteVersion !== undefined) {
+          const knownVersion = knownManagedVersions.get(config.name) || 0;
+          if (remoteVersion !== knownVersion) {
+            const managed = await loadManagedKeys(config.name, true);
+            if (managed !== undefined) {
+              if (managed) {
+                existing.keys = managed;
+              } else {
+                existing.keys = parseKeys(process.env[config.envKeyField], config.name);
+              }
+              knownManagedVersions.set(config.name, remoteVersion);
+              lastManagedVersionCheck.set(config.name, Date.now());
+            }
+          } else {
+            lastManagedVersionCheck.set(config.name, Date.now());
+          }
         }
-        knownManagedVersions.set(config.name, remoteVersion);
+      } catch {
+        // Keep current state on error and retry later
       }
     }
     return existing;
   }
   // First call or force refresh — try managed keys, then env vars
-  const [managed, version] = await Promise.all([
-    loadManagedKeys(config.name, forceRefresh),
-    loadManagedKeysVersion(config.name),
-  ]);
-  if (managed) {
-    const pool: KeyPool = { provider: config.name, keys: managed, counter: 0 };
-    keyPools.set(config.name, pool);
-    knownManagedVersions.set(config.name, version);
-    lastManagedVersionCheck.set(config.name, Date.now());
-    return pool;
+  try {
+    const [managed, version] = await Promise.all([
+      loadManagedKeys(config.name, forceRefresh),
+      loadManagedKeysVersion(config.name),
+    ]);
+    if (managed !== undefined && version !== undefined) {
+      if (managed) {
+        const pool: KeyPool = { provider: config.name, keys: managed, counter: 0 };
+        keyPools.set(config.name, pool);
+        knownManagedVersions.set(config.name, version);
+        lastManagedVersionCheck.set(config.name, Date.now());
+        return pool;
+      }
+      const pool = initKeyPool(config);
+      knownManagedVersions.set(config.name, version);
+      lastManagedVersionCheck.set(config.name, Date.now());
+      return pool;
+    }
+  } catch {
+    // fall through to fallback
   }
+
+  // Fallback to env keys or existing pool if it's already there
+  if (existing) return existing;
   const pool = initKeyPool(config);
-  knownManagedVersions.set(config.name, version);
   lastManagedVersionCheck.set(config.name, Date.now());
   return pool;
 }

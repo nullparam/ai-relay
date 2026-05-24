@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryMockKV, getManagedKeys, getManagedKeysVersion, setManagedKeys } from '../lib/admin/admin-config';
-import { KVUsageStorage } from '../lib/usage/storage/kv-storage';
+import { __usageStorageCacheForTests, KVUsageStorage } from '../lib/usage/storage/kv-storage';
 import { createUsageEvent } from '../lib/usage';
 import { kvKeys } from '../lib/usage/storage/kv-keys';
+import { getKeyPool } from '../lib/relay/key-pool';
 
 function installMockKV() {
   const mock = createMemoryMockKV();
@@ -28,6 +29,7 @@ describe('KV command optimization', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    __usageStorageCacheForTests.clear();
     installMockKV();
   });
 
@@ -69,6 +71,46 @@ describe('KV command optimization', () => {
     });
   });
 
+  it('clears cached per-key usage after usage writes', async () => {
+    const kv = installMockKV();
+    const storage = new KVUsageStorage();
+    const date = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    await kv.hset(kvKeys.legacyKeyDaily('keyhash1', date), { requests: '1', tokens: '10' });
+    await kv.hset(kvKeys.legacyKeyTotal('keyhash1'), { requests: '1', tokens: '10' });
+    await expect(storage.getKeyUsage('keyhash1')).resolves.toEqual({
+      daily: { requests: 1, tokens: 10 },
+      total: { requests: 1, tokens: 10 },
+    });
+
+    await kv.hset(kvKeys.legacyKeyDaily('keyhash1', date), { requests: '2', tokens: '20' });
+    await kv.hset(kvKeys.legacyKeyTotal('keyhash1'), { requests: '2', tokens: '20' });
+    await storage.record(usageEvent({ apiKeyHash: 'other-key' }));
+
+    await expect(storage.getKeyUsage('keyhash1')).resolves.toEqual({
+      daily: { requests: 2, tokens: 20 },
+      total: { requests: 2, tokens: 20 },
+    });
+  });
+
+  it('prunes expired admin cache entries during cache activity', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-24T00:00:00Z'));
+
+    try {
+      __usageStorageCacheForTests.clear();
+      __usageStorageCacheForTests.set('keyUsage:expired:today', { stale: true }, 1);
+      expect(__usageStorageCacheForTests.size()).toBe(1);
+
+      vi.advanceTimersByTime(60_001);
+      __usageStorageCacheForTests.set('globalUsage:fresh', { fresh: true });
+
+      expect(__usageStorageCacheForTests.size()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('supports full per-key usage mode when explicitly enabled', async () => {
     const kv = installMockKV();
     vi.stubEnv('RELAY_KV_KEY_USAGE_MODE', 'full');
@@ -105,6 +147,21 @@ describe('KV command optimization', () => {
     });
   });
 
+  it('reads provider error stats through a single pipeline', async () => {
+    const kv = installMockKV();
+    const storage = new KVUsageStorage();
+    const date = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const originalPipeline = kv.pipeline.bind(kv);
+    kv.pipeline = vi.fn(() => originalPipeline());
+
+    await kv.hset(kvKeys.errorProviderDaily('openai', date), { 429: '2' });
+
+    await expect(storage.getErrorStats()).resolves.toMatchObject({
+      openai: { 429: 2 },
+    });
+    expect(kv.pipeline).toHaveBeenCalledTimes(1);
+  });
+
   it('increments managed-key versions when keys change', async () => {
     installMockKV();
 
@@ -128,5 +185,32 @@ describe('KV command optimization', () => {
 
     await expect(getManagedKeys('openai')).resolves.toEqual(['sk-a']);
     await expect(getManagedKeys('openai', true)).resolves.toEqual(['sk-b']);
+  });
+
+  it('retains healthy keys in key pool if version check or key fetch fails', async () => {
+    const kv = installMockKV();
+    const config = { name: 'openai', displayName: 'OpenAI', envKeyField: 'OPENAI_KEYS' } as any;
+
+    // 1. Setup healthy managed keys
+    await setManagedKeys('openai', ['sk-healthy-1', 'sk-healthy-2']);
+    const pool1 = await getKeyPool(config, true);
+    expect(pool1.keys.map(k => k.key)).toEqual(['sk-healthy-1', 'sk-healthy-2']);
+
+    // 2. Mock KV to fail on next check
+    const originalGet = kv.get;
+    kv.get = async (key: string) => {
+      if (key.includes('admin:keys:version:') || key.includes('admin:keys:')) {
+        throw new Error('KV Network Error');
+      }
+      return originalGet.call(kv, key);
+    };
+
+    // 3. Fast-forward version check TTL and trigger key pool check
+    vi.stubEnv('RELAY_KEY_POOL_VERSION_CHECK_TTL_MS', '1');
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    // Key Pool should gracefully handle the exception and keep the healthy keys pool
+    const pool2 = await getKeyPool(config);
+    expect(pool2.keys.map(k => k.key)).toEqual(['sk-healthy-1', 'sk-healthy-2']);
   });
 });
