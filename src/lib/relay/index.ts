@@ -10,3 +10,4 @@ export {
   getBackoffDelay,
 } from './rate-limiter';
 export { getConcurrencyStats } from './concurrency';
+export { validateBase64ImageSizes } from './validation';

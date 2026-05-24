@@ -10,7 +10,7 @@
 // ============================================================
 
 import { NextRequest } from 'next/server';
-import { validateAuth, relayRequest } from '@/lib/relay';
+import { validateAuth, relayRequest, validateBase64ImageSizes } from '@/lib/relay';
 import { RelayError } from '@/lib/errors';
 import { KVUsageStorage, createUsageEvent } from '@/lib/usage';
 
@@ -149,19 +149,26 @@ function wrapStreamWithUsageTracking(
 function estimatePromptTokens(body: { messages?: Array<{ content?: string | Array<unknown> }> }): number {
   if (!body.messages) return 0;
   let totalChars = 0;
+  let imageCount = 0;
   for (const msg of body.messages) {
     if (typeof msg.content === 'string') {
       totalChars += msg.content.length;
     } else if (Array.isArray(msg.content)) {
       // Multi-modal: estimate text parts
       for (const part of msg.content) {
-        if (typeof part === 'object' && part !== null && 'text' in part) {
-          totalChars += String((part as { text: string }).text).length;
+        if (typeof part === 'object' && part !== null) {
+          if ('text' in part) {
+            totalChars += String((part as { text: string }).text).length;
+          } else if ('type' in part && (part as { type: string }).type === 'image_url') {
+            imageCount++;
+          }
         }
       }
     }
   }
-  return Math.max(1, Math.ceil(totalChars / CHARS_PER_TOKEN));
+  const textTokens = Math.ceil(totalChars / CHARS_PER_TOKEN);
+  const imageTokens = imageCount * 85; // Rough estimate of standard low-res image token cost
+  return Math.max(1, textTokens + imageTokens);
 }
 
 /**
@@ -194,6 +201,21 @@ export async function POST(request: NextRequest) {
       JSON.stringify({
         error: {
           message: 'Invalid JSON in request body.',
+          type: 'invalid_request_error',
+          code: 400,
+        },
+      }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Validate base64 image sizes
+  const base64Check = validateBase64ImageSizes(body);
+  if (!base64Check.valid) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: base64Check.error,
           type: 'invalid_request_error',
           code: 400,
         },

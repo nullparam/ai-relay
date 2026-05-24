@@ -85,3 +85,44 @@ describe('mimo-v2.5 provider resolution and mapping tests', () => {
     expect(tudoProvider?.models?.find(m => m.id === 'mimo-v2.5-pro')?.supportsVision).toBe(true);
   });
 });
+
+import { validateBase64ImageSizes } from '../lib/relay/validation';
+
+describe('base64 image size validation tests', () => {
+  it('should pass validation for small base64 images', () => {
+    const smallBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const body = {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Hello' },
+            { type: 'image_url', image_url: { url: `data:image/png;base64,${smallBase64}` } }
+          ]
+        }
+      ]
+    };
+    const result = validateBase64ImageSizes(body);
+    expect(result.valid).toBe(true);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('should fail validation and return error message for base64 images exceeding 1MB', () => {
+    // 2MB data: 2 * 1024 * 1024 = 2,097,152 bytes. Base64 length = 2097152 * 4 / 3 = 2,796,203 chars
+    const largeString = 'A'.repeat(2800000);
+    const body = {
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Look at this large image' },
+            { type: 'image_url', image_url: { url: `data:image/png;base64,${largeString}` } }
+          ]
+        }
+      ]
+    };
+    const result = validateBase64ImageSizes(body);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('Base64 image size exceeds the limit of 1MB');
+  });
+});
