@@ -235,10 +235,12 @@ Generate time-limited keys from the Admin dashboard:
 | `CLAUDE_KEYS` | Anthropic API Keys | ⬜ |
 | `DEEPSEEK_KEYS` | DeepSeek API Keys | ⬜ |
 | `XIAOMI_KEYS` | Xiaomi API Keys | ⬜ |
+| `XIAOMIMIMO_SGP_CODING_KEYS` | MiMo SGP Coding Plan API keys | ⬜ |
+| `XIAOMI_CODING_KEYS` | MiMo Coding Plan API keys | ⬜ |
 | `RELAY_KV_USAGE_SAMPLE_RATE` | Usage write sample rate; `1` is exact, `0.1` writes about 10% and scales values as estimates | ⬜ |
 
 > [!NOTE]
-> Provider keys are best configured via the Admin panel (stored in Upstash Redis), not as environment variables.
+> Provider keys are best configured via the Admin panel (stored in Upstash Redis), not as environment variables. When adding or testing keys in Admin, both raw API keys and Base64-encoded keys are accepted and decoded automatically before saving or testing.
 
 ### Supported Providers
 
@@ -247,7 +249,9 @@ Generate time-limited keys from the Admin dashboard:
 | OpenAI | gpt-5.4, gpt-latest, gpt-5.4-mini | ✅ Built-in |
 | Anthropic (Claude) | claude-sonnet-4-6, claude-opus-4-7 | ✅ Built-in |
 | DeepSeek | deepseek-v4-flash, deepseek-v4-pro | ✅ Built-in |
-| Xiaomi (MiMo) | mimo-7b | ✅ Built-in |
+| MiMo (API Key) | mimo-v2.5, mimo-v2.5-pro | ✅ Built-in |
+| MiMo SGP (Coding Plan) | mimo-v2.5-sgp, mimo-v2.5-pro-sgp | ✅ Built-in |
+| MiMo (Coding Plan) | mimo-v2.5-coding, mimo-v2.5-pro-coding | ✅ Built-in |
 | Custom | Any OpenAI-compatible API | ✅ Configurable |
 
 ## 🏗️ Architecture
