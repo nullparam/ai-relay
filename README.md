@@ -140,7 +140,7 @@ curl -X POST https://你的项目.vercel.app/v1/chat/completions \
 
 **第 1 步 — Fork 仓库并配置 GitHub Secrets**
 
-在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中添加以下 Secrets：
+在 GitHub 仓库的 **Settings → Secrets and variables → Actions → Repository secrets**（不是 Environment secrets）中添加以下 Secrets：
 
 | Secret | 说明 | 必填 |
 |--------|------|------|
@@ -163,6 +163,8 @@ curl -X POST https://你的项目.vercel.app/v1/chat/completions \
 > **如何获取 Account ID：**
 > 1. 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/)
 > 2. 在右侧边栏可以看到 **Account ID**
+>
+> **⚠️ 注意：** 必须添加到 **Repository secrets**，不是 Environment secrets。Environment secrets 只在特定环境部署时可用，会导致 workflow 无法读取。
 
 **第 2 步 — 推送触发部署**
 
