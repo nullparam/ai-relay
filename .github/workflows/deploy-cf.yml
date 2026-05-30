@@ -74,7 +74,7 @@ jobs:
           fi
 
       - name: Build for Cloudflare Pages
-        run: pnpm exec opennextjs-cloudflare
+        run: pnpm exec opennextjs-cloudflare build
         env:
           NODE_ENV: production
 
