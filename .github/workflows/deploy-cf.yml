@@ -58,49 +58,63 @@ jobs:
           export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID}"
 
           # Check and create D1 database if not exists, then extract database_id
-          if ! pnpm exec wrangler d1 list | grep -q "ai-relay"; then
+          D1_EXISTS=$(pnpm exec wrangler d1 list --json | jq -r '.[] | select(.name == "ai-relay") | .uuid')
+          if [ -z "$D1_EXISTS" ]; then
             echo "Creating D1 database: ai-relay"
-            D1_OUTPUT=$(pnpm exec wrangler d1 create ai-relay)
+            D1_OUTPUT=$(pnpm exec wrangler d1 create ai-relay --json)
             echo "$D1_OUTPUT"
-            DATABASE_ID=$(echo "$D1_OUTPUT" | grep -oP 'database_id = "\K[^"]+' || echo "$D1_OUTPUT" | grep -oP "database_id = '\K[^']+" || true)
+            DATABASE_ID=$(echo "$D1_OUTPUT" | jq -r '.uuid')
           else
-            echo "D1 database ai-relay already exists, fetching database_id"
-            DATABASE_ID=$(pnpm exec wrangler d1 list | grep "ai-relay" | awk '{print $2}')
+            echo "D1 database ai-relay already exists"
+            DATABASE_ID="$D1_EXISTS"
           fi
 
-          if [ -n "$DATABASE_ID" ]; then
+          if [ -n "$DATABASE_ID" ] && [ "$DATABASE_ID" != "null" ]; then
             echo "D1 database_id: $DATABASE_ID"
+            # Escape any special characters for sed
+            ESCAPED_ID=$(printf '%s\n' "$DATABASE_ID" | sed 's/[&/\]/\\&/g')
             # Update wrangler.toml with database_id
             if grep -q "database_id" wrangler.toml; then
-              sed -i.bak "s/database_id = .*/database_id = \"$DATABASE_ID\"/" wrangler.toml
+              sed -i.bak "s|database_id = .*|database_id = \"${ESCAPED_ID}\"|" wrangler.toml
             else
               # Insert database_id after database_name line
-              sed -i.bak "/database_name = \"ai-relay\"/a database_id = \"$DATABASE_ID\"" wrangler.toml
+              sed -i.bak "/database_name = \"ai-relay\"/a\\
+database_id = \"${ESCAPED_ID}\"" wrangler.toml
             fi
+          else
+            echo "❌ Error: Failed to obtain D1 database_id"
+            exit 1
           fi
 
           # Check and create KV namespace if not exists, then extract id
-          if ! pnpm exec wrangler kv namespace list | grep -q "ai-relay"; then
+          KV_EXISTS=$(pnpm exec wrangler kv namespace list --json | jq -r '.[] | select(.title == "ai-relay") | .id')
+          if [ -z "$KV_EXISTS" ]; then
             echo "Creating KV namespace: ai-relay"
-            KV_OUTPUT=$(pnpm exec wrangler kv namespace create ai-relay)
+            KV_OUTPUT=$(pnpm exec wrangler kv namespace create ai-relay --json)
             echo "$KV_OUTPUT"
-            KV_ID=$(echo "$KV_OUTPUT" | grep -oP 'id = "\K[^"]+' || echo "$KV_OUTPUT" | grep -oP "id = '\K[^']+" || true)
+            KV_ID=$(echo "$KV_OUTPUT" | jq -r '.id')
           else
-            echo "KV namespace ai-relay already exists, fetching id"
-            KV_ID=$(pnpm exec wrangler kv namespace list | grep "ai-relay" | awk '{print $2}')
+            echo "KV namespace ai-relay already exists"
+            KV_ID="$KV_EXISTS"
           fi
 
-          if [ -n "$KV_ID" ]; then
+          if [ -n "$KV_ID" ] && [ "$KV_ID" != "null" ]; then
             echo "KV namespace id: $KV_ID"
+            ESCAPED_KV_ID=$(printf '%s\n' "$KV_ID" | sed 's/[&/\]/\\&/g')
             # Update wrangler.toml with KV id
-            if grep -q "id = " wrangler.toml; then
-              sed -i.bak "s/id = .*/id = \"$KV_ID\"/" wrangler.toml
+            if grep -q "^id = " wrangler.toml; then
+              sed -i.bak "s|^id = .*|id = \"${ESCAPED_KV_ID}\"|" wrangler.toml
             else
               # Insert id after binding = "KV" line
-              sed -i.bak "/binding = \"KV\"/a id = \"$KV_ID\"" wrangler.toml
+              sed -i.bak "/binding = \"KV\"/a\\
+id = \"${ESCAPED_KV_ID}\"" wrangler.toml
             fi
+          else
+            echo "❌ Error: Failed to obtain KV namespace id"
+            exit 1
           fi
 
+          rm -f wrangler.toml.bak
           echo "Updated wrangler.toml:"
           cat wrangler.toml
 
