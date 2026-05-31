@@ -2,27 +2,23 @@
 
 <img src="docs/assets/logo-banner.svg" alt="AI Relay" width="400">
 
-**Serverless AI API Relay Gateway — deploy to Vercel or Cloudflare in one click and run your own multi-provider AI gateway in 2 minutes**
+**Serverless AI API Relay Gateway — one-click deploy to Vercel, or automated deploy to Cloudflare via GitHub Actions**
 
-<h3>🚀 <a href="https://vercel.com/new/clone?repository-url=https://github.com/MoyuFamily/ai-relay&env=RELAY_API_KEY,RELAY_ADMIN_KEY,RELAY_SIGNING_SECRET&envDescription=API%20authentication%20keys%20(required%20for%20security)&envLink=https://github.com/MoyuFamily/ai-relay#environment-variables">Deploy to Vercel in one click</a> · <a href="#-deploy-to-cloudflare-pagesfully-automated">Deploy to Cloudflare Pages</a></h3>
+<h3>🚀 <a href="https://vercel.com/new/clone?repository-url=https://github.com/MoyuFamily/ai-relay&env=RELAY_API_KEY,RELAY_ADMIN_KEY,RELAY_SIGNING_SECRET&envDescription=API%20authentication%20keys%20(required%20for%20security)&envLink=https://github.com/MoyuFamily/ai-relay#environment-variables">Deploy to Vercel in one click and launch your AI API gateway in 2 minutes</a></h3>
 
-<p>No server, no Docker, no backend ops. Deploy to <strong>Vercel</strong> or <strong>Cloudflare Pages</strong> with one click — set 3 environment variables and run your own multi-provider AI Relay.</p>
+<p>No server, no Docker, no backend ops. Vercel one-click deploy; Cloudflare via GitHub Actions push-to-deploy.</p>
 
 <p>
   <a href="https://vercel.com/new/clone?repository-url=https://github.com/MoyuFamily/ai-relay&env=RELAY_API_KEY,RELAY_ADMIN_KEY,RELAY_SIGNING_SECRET&envDescription=API%20authentication%20keys%20(required%20for%20security)&envLink=https://github.com/MoyuFamily/ai-relay#environment-variables">
     <img src="https://vercel.com/button" alt="Deploy with Vercel" height="42">
   </a>
-  &nbsp;&nbsp;
-  <a href="#-deploy-to-cloudflare-pagesfully-automated">
-    <img src="https://img.shields.io/badge/⚡_Deploy_to_Cloudflare-F38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Deploy to Cloudflare" height="42">
-  </a>
 </p>
 
-<p><strong><a href="https://vercel.com/new/clone?repository-url=https://github.com/MoyuFamily/ai-relay&env=RELAY_API_KEY,RELAY_ADMIN_KEY,RELAY_SIGNING_SECRET&envDescription=API%20authentication%20keys%20(required%20for%20security)&envLink=https://github.com/MoyuFamily/ai-relay#environment-variables">👉 Deploy Now</a></strong> · <a href="#-one-click-deploy-launch-your-ai-api-gateway-in-2-minutes">View setup steps</a> · <a href="#-deploy-to-cloudflare-pagesfully-automated">Cloudflare guide</a></p>
+<p><strong><a href="https://vercel.com/new/clone?repository-url=https://github.com/MoyuFamily/ai-relay&env=RELAY_API_KEY,RELAY_ADMIN_KEY,RELAY_SIGNING_SECRET&envDescription=API%20authentication%20keys%20(required%20for%20security)&envLink=https://github.com/MoyuFamily/ai-relay#environment-variables">👉 Deploy Now</a></strong> · <a href="#-one-click-deploy-launch-your-ai-api-gateway-in-2-minutes">View setup steps</a></p>
 
 [![Version](https://img.shields.io/badge/Version-2.8.0-green.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org/)
 [![Edge Runtime](https://img.shields.io/badge/Edge_Runtime-⚡-black?logo=vercel)](https://vercel.com/docs/functions/edge-functions)
 [![Upstash Redis](https://img.shields.io/badge/Upstash_Redis-Redis-black?logo=redis)](https://vercel.com/marketplace/upstash)
 
@@ -32,15 +28,15 @@
 
 ---
 
-> 🚀 **No server, no Docker, no backend ops.**
+> 🚀 **No server, no Docker, no backend ops.** Vercel one-click; Cloudflare push-to-deploy via GitHub Actions.
 >
-> AI Relay runs on Edge Runtime with one-click deploy to **Vercel** or **Cloudflare Pages**. Set 3 environment variables and get your own serverless AI API relay gateway for OpenAI, Claude, DeepSeek, and custom providers.
+> Click **Deploy with Vercel** for instant launch, or fork and push to deploy on Cloudflare with D1 + KV auto-configuration.
 
 | What you care about | AI Relay's answer |
 |---|---|
-| **How do I deploy it?** | One-click deploy to Vercel or Cloudflare Pages — set 3 environment variables and launch in about 2 minutes |
+| **How do I deploy it?** | Vercel: one-click deploy; Cloudflare: fork → configure GitHub Secrets → push to main, GitHub Actions handles the rest |
 | **Do I need a server?** | No VPS, no Docker, no backend operations |
-| **Can it start free?** | Personal and small-team friendly — start free on Vercel + Upstash (500K KV ops/month) or Cloudflare (D1 + KV free tier) |
+| **Can it start free?** | Vercel + Upstash free tier (500K KV ops/month); Cloudflare free tier (D1 5M reads + KV 100K ops/day); with sampling enabled, request-to-KV ratio drops to ~1:1 |
 | **Is integration hard?** | Keep the OpenAI SDK, change only `base_url`, and keep using `/v1/chat/completions` |
 
 ## Table of Contents
@@ -63,9 +59,9 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Serverless Architecture** | Built on Edge Runtime (Vercel / Cloudflare) — no VPS, no Docker, no backend ops |
-| **One-Click Deploy** | One-click deploy to Vercel or Cloudflare Pages — set 3 env vars and launch in ~2 minutes |
-| **Free Tier Friendly** | Personal developers and small teams can start on Vercel or Cloudflare free tier |
+| **Serverless Architecture** | Vercel Edge Runtime or Cloudflare Pages Workers — no VPS, no Docker, no backend ops |
+| **One-Click Deploy** | Vercel: one-click Deploy button; Cloudflare: fork + configure Secrets + push to main, GitHub Actions auto-deploys |
+| **Free Tier Friendly** | Vercel + Upstash free tier; Cloudflare free tier (D1 5M reads + KV 100K ops/day) |
 | **OpenAI Compatible** | Drop-in replacement for the OpenAI SDK |
 | **Multi-Provider Routing** | OpenAI · Claude · DeepSeek · MiMo · Custom |
 | **Multi-Key Rotation** | Round-Robin with automatic 429 backoff |
@@ -222,7 +218,7 @@ npm run dev  # http://localhost:3000
 
 | Feature | AI Relay | OpenRouter | OneAPI / new-api | FastGPT |
 |---------|----------|------------|------------------|---------|
-| **Deployment** | **Vercel / Cloudflare one-click deploy (Edge)** | SaaS only | Self-hosted (Docker) | Self-hosted (Docker) |
+| **Deployment** | **Vercel one-click deploy (Edge)** | SaaS only | Self-hosted (Docker) | Self-hosted (Docker) |
 | **Infra Cost** | **No server required; free-tier friendly** | Pay-per-use | Requires server | Requires server |
 | **Cold Start** | < 50ms | N/A | Seconds | Seconds |
 | **Circuit Breaker** | ✅ | ❌ | ❌ | ❌ |
@@ -232,14 +228,13 @@ npm run dev  # http://localhost:3000
 | **Temp API Keys** | ✅ HMAC signed | ❌ | ✅ | ✅ |
 | **Primary Use Case** | Personal / small team | API marketplace | Multi-key mgmt | Knowledge base + API |
 
-**Choose AI Relay:** when you want a self-controlled AI API gateway without buying servers, maintaining Docker, or operating backend services. AI Relay gives you serverless deployment on dual platforms (Vercel / Cloudflare), a 2-minute setup path, multi-provider failover, and low-latency Edge runtime.
+**Choose AI Relay:** when you want a self-controlled AI API gateway without buying servers, maintaining Docker, or operating backend services. AI Relay gives you serverless deployment, a 2-minute setup path, multi-provider failover, and low-latency Edge runtime.
 
 ## Why AI Relay?
 
-- **No server required**: Runs on Edge Runtime — no VPS, Docker, or ops work.
-- **Dual platform**: Vercel or Cloudflare Pages — one-click deploy, no vendor lock-in.
+- **No server required**: Runs on Vercel Edge Runtime — no VPS, Docker, or ops work.
 - **Fast to deploy**: Click a button, set environment variables, and launch in about 2 minutes.
-- **Low starting cost**: Individual developers and small teams can start on free tier.
+- **Low starting cost**: Individual developers and small teams can start on Vercel's free tier.
 - **Easy integration**: OpenAI-compatible API; existing SDKs only need a `base_url` change.
 - **Practical resilience**: Multi-provider routing, key rotation, fallback, and circuit breaker built in.
 
@@ -333,21 +328,11 @@ Generate time-limited keys from the Admin dashboard:
 ## 🏗️ Architecture
 
 ```
-Vercel Deploy:
 Client → Edge Runtime (global, <50ms latency)
               ├─ Circuit Breaker
               ├─ Multi-Level Fallback (Provider → Key)
               ├─ Key Rotation (Round-Robin + 429 backoff)
               └─ Upstash Redis (keys, quotas, usage)
-
-Cloudflare Deploy:
-Client → CF Pages Worker (global, <50ms latency)
-              ├─ Circuit Breaker
-              ├─ Multi-Level Fallback (Provider → Key)
-              ├─ Key Rotation (Round-Robin + 429 backoff)
-              ├─ Cloudflare KV (keys, quotas)
-              ├─ Cloudflare D1 (usage stats)
-              └─ CF Cron Triggers (scheduled tasks)
 ```
 
 ## 📊 Admin Dashboard
